@@ -36,7 +36,7 @@ impl<'a> Token<'a> {
             Token::BangEqual => "BANG_EQUAL",
             Token::Comma => "COMMA",
             Token::Dot => "DOT",
-            Token::Equal => "EOF",
+            Token::Equal => "EQUAL",
             Token::EqualEqual => "EQUAL_EQUAL",
             Token::Greater => "GREATER",
             Token::GreaterEqual => "GREATER_EQUAL",
