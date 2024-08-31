@@ -1,37 +1,45 @@
-use std::env;
+use clap::{Parser, Subcommand};
+use codecrafters_interpreter::Scanner;
 use std::fs;
-use std::io::{self, Write};
+use std::path::PathBuf;
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
-        writeln!(io::stderr(), "Usage: {} tokenize <filename>", args[0]).unwrap();
-        return;
-    }
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    let command = &args[1];
-    let filename = &args[2];
+#[derive(Subcommand)]
+enum Commands {
+    /// Tokenizes the input file
+    Tokenize { filename: PathBuf },
+}
 
-    match command.as_str() {
-        "tokenize" => {
-            // You can use print statements as follows for debugging, they'll be visible when running tests.
-            writeln!(io::stderr(), "Logs from your program will appear here!").unwrap();
+fn main() -> Result<(), anyhow::Error> {
+    let cli = Cli::parse();
 
-            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+    match cli.command {
+        Commands::Tokenize { filename } => {
+            let file_contents = fs::read_to_string(&filename).unwrap_or_else(|_| {
+                eprintln!("Failed to read file {:?}", filename);
                 String::new()
             });
 
             //  Uncomment this block to pass the first stage
             if !file_contents.is_empty() {
-                panic!("Scanner not implemented");
+                let scanner = Scanner::new(&file_contents);
+                for token in scanner {
+                    let token = token?;
+                    println!("{token}");
+                }
+                println!("EOF  null");
             } else {
                 println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
             }
         }
-        _ => {
-            writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
-            return;
-        }
     }
+
+    Ok(())
 }
