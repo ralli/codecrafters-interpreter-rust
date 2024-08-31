@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use codecrafters_interpreter::Scanner;
 use std::fs;
 use std::path::PathBuf;
+use std::process::exit;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -27,16 +28,20 @@ fn main() -> Result<(), anyhow::Error> {
                 String::new()
             });
 
-            //  Uncomment this block to pass the first stage
-            if !file_contents.is_empty() {
-                let scanner = Scanner::new(&file_contents);
-                for token in scanner {
-                    let token = token?;
-                    println!("{token}");
+            let scanner = Scanner::new(&file_contents);
+            let mut num_errors = 0;
+            for token in scanner {
+                match token {
+                    Ok(tok) => println!("{tok}"),
+                    Err(e) => {
+                        eprintln!("{e}");
+                        num_errors += 1
+                    },
                 }
-                println!("EOF  null");
-            } else {
-                println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
+            }
+            println!("EOF  null");
+            if num_errors > 0 {
+                exit(65);
             }
         }
     }

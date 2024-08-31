@@ -97,6 +97,7 @@ impl<'a> fmt::Display for Token<'a> {
 pub struct Scanner<'a> {
     input: &'a str,
     it: Peekable<Enumerate<Chars<'a>>>,
+    line: usize,
 }
 
 impl<'a> Scanner<'a> {
@@ -104,6 +105,7 @@ impl<'a> Scanner<'a> {
         Self {
             input,
             it: input.chars().enumerate().peekable(),
+            line: 1,
         }
     }
 }
@@ -112,7 +114,15 @@ impl<'a> Iterator for Scanner<'a> {
     type Item = Result<Token<'a>, anyhow::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (pos, c) = self.it.next()?;
+        while let Some(true) = self.it.peek().map(|(_pos, c)| c.is_whitespace()) {
+            let (_pos, c) = self.it.next()?;
+            if c == '\n' {
+                self.line += 1;
+            }
+        }
+
+        let (_pos, c) = self.it.next()?;
+        let line = self.line;
 
         let mut bla = move |with_equal: Token<'a>, without_equal: Token<'a>| {
             match self.it.peek() {
@@ -140,7 +150,11 @@ impl<'a> Iterator for Scanner<'a> {
             ';' => Some(Ok(Token::Semicolon)),
             '/' => Some(Ok(Token::Slash)),
             '*' => Some(Ok(Token::Star)),
-            _ => Some(Err(anyhow!("invalid character {} at {}", c, pos))),
+            _ => {
+
+                // eprintln!("[line {}] Error: Unexpected character: {}", line, c);
+                Some(Err(anyhow!("[line {}] Error: Unexpected character: {}", line, c)))
+            }
         }
     }
 }
