@@ -59,6 +59,21 @@ impl fmt::Display for ComparisonOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum EqualityOp {
+    Equal,
+    NotEqual,
+}
+
+impl fmt::Display for EqualityOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            EqualityOp::Equal => "==",
+            EqualityOp::NotEqual => "!=",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ast<'a> {
     Boolean(bool),
     Number(f64),
@@ -67,6 +82,7 @@ pub enum Ast<'a> {
     Unary(UnaryOp, Rc<Ast<'a>>),
     Binary(BinaryOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Comparison(ComparisonOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
+    Equality(EqualityOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Nil,
 }
 
@@ -86,6 +102,7 @@ impl<'a> fmt::Display for Ast<'a> {
             Ast::Unary(op, rhs) => write!(f, "({op} {rhs})"),
             Ast::Binary(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
             Ast::Comparison(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
+            Ast::Equality(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
             Ast::Nil => write!(f, "nil"),
         }
     }
@@ -106,12 +123,36 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-        let result = self.parse_relational()?;
+        let result = self.parse_expression()?;
         match self.scanner.peek() {
             None => Ok(result),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}. end of input expected.", t)),
             _ => Err(anyhow!("end of input expected")),
         }
+    }
+
+    fn parse_expression(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+       self.parse_equality()
+    }
+
+    fn parse_equality(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+        let mut lhs = self.parse_relational()?;
+        while let Some(true) = self.scanner.peek().map(|t| match t {
+            Ok(tok) => {
+                *tok == Token::EqualEqual || *tok == Token::BangEqual
+            }
+            _ => false
+        }) {
+            let op = self.scanner.next().unwrap()?;
+            let rhs = self.parse_relational()?;
+            let binary_op = match op {
+                Token::EqualEqual => EqualityOp::Equal,
+                Token::BangEqual => EqualityOp::NotEqual,
+                _ => unreachable!()
+            };
+            lhs = Rc::new(Ast::Equality(binary_op, lhs, rhs));
+        }
+        Ok(lhs)
     }
 
     fn parse_relational(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
@@ -203,7 +244,7 @@ impl<'a> Parser<'a> {
             }
             Some(Ok(Token::LeftParen)) => {
                 self.scanner.next();
-                let inner = self.parse_relational()?;
+                let inner = self.parse_expression()?;
                 match self.scanner.peek() {
                     Some(Ok(Token::RightParen)) => {
                         self.scanner.next();
