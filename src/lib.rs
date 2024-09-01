@@ -110,13 +110,11 @@ impl<'a> Scanner<'a> {
     }
 
     fn skip_comment(&mut self) {
-        let Some((pos, '/')) = self.it.peek() else { return; };
+        let Some((pos, '/')) = self.it.peek().copied() else { return; };
 
-        let mut rest = (&self.input[*pos..]).chars().skip(1);
+        let mut rest = (&self.input[pos..]).chars().skip(1);
 
-        if let Some(true) = rest.next().map(|c| c != '/') {
-            return;
-        }
+        let Some('/') = rest.next() else {return;};
 
         while let Some(true) = self.it.peek().map(|(_, c)| *c != '\n') {
             self.it.next();
