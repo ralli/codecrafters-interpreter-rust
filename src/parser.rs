@@ -1,23 +1,23 @@
 use crate::{Scanner, ScannerError, Token};
+use anyhow::anyhow;
 use std::fmt;
 use std::fmt::Formatter;
 use std::rc::Rc;
-use anyhow::anyhow;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("{0}")]
-    Scanner(#[from] ScannerError),
+    AnyError(anyhow::Error),
 
-    #[error("{0}")]
-    AnyError(#[from] anyhow::Error),
-    #[error("end of input expected. got {0:?}")]
-    EOFExpected(Option<String>),
-    #[error("expression expected. got {0:?}")]
-    ExpressionExpected(Option<String>),
-    #[error("')' expected. got {0:?}")]
-    RightParenExpected(Option<String>),
+    #[error("[line {0}] end of input expected. got {1}")]
+    EOFExpected(usize, String),
+
+    #[error("[line {0}] expression expected. got {1}")]
+    ExpressionExpected(usize, String),
+
+    #[error("[line {0}] ')' expected. got {1}")]
+    RightParenExpected(usize, String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,6 +127,7 @@ impl<'a> fmt::Display for Ast<'a> {
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
     current: Option<Result<Token<'a>, ScannerError>>,
+    line: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -135,6 +136,7 @@ impl<'a> Parser<'a> {
             // input,
             scanner: Scanner::new(input),
             current: None,
+            line: 1,
         }
     }
 
@@ -143,12 +145,13 @@ impl<'a> Parser<'a> {
         let result = self.parse_expression()?;
         match self.peek() {
             None => Ok(result),
-            Some(Ok(t)) => Err(ParseError::EOFExpected(Some(t.lexeme().to_string()))),
-            Some(Err(e)) => Err(ParseError::AnyError(e.into())),
+            Some(Ok(t)) => Err(ParseError::EOFExpected(self.line, t.lexeme().into())),
+            Some(Err(e)) => Err(e),
         }
     }
 
     fn next(&mut self) -> Option<Result<&Token<'a>, ParseError>> {
+        self.line = self.scanner.current_line();
         self.current = self.scanner.next();
         self.peek()
     }
@@ -173,8 +176,8 @@ impl<'a> Parser<'a> {
             }
             _ => false
         }) {
-            self.next();
             let op = self.peek().unwrap().copied()?;
+            self.next();
             let rhs = self.parse_relational()?;
             let binary_op = match op {
                 Token::EqualEqual => EqualityOp::Equal,
@@ -195,6 +198,7 @@ impl<'a> Parser<'a> {
             _ => false
         }) {
             let op = self.peek().unwrap().copied()?;
+            self.next();
             let rhs = self.parse_add()?;
             let binary_op = match op {
                 Token::Less => ComparisonOp::Less,
@@ -217,8 +221,8 @@ impl<'a> Parser<'a> {
             }
             _ => false
         }) {
-            self.next();
             let op = self.peek().unwrap().copied()?;
+            self.next();
             let rhs = self.parse_mul()?;
             let binary_op = match op {
                 Token::Plus => BinaryOp::Add,
@@ -238,7 +242,8 @@ impl<'a> Parser<'a> {
             }
             _ => false
         }) {
-            let op = self.next().unwrap().copied()?;
+            let op = self.peek().unwrap().copied()?;
+            self.next();
             let rhs = self.parse_terminal_or_group()?;
             let binary_op = match op {
                 Token::Star => BinaryOp::Mul,
@@ -283,12 +288,12 @@ impl<'a> Parser<'a> {
                         Ok(Ast::Group(inner))
                     }
                     Some(Ok(t)) => {
-                        Err(ParseError::RightParenExpected(Some(t.lexeme().to_string())))
+                        Err(ParseError::RightParenExpected(self.line, t.lexeme().into()))
                     }
-                    Some(Err(e)) => Err(ParseError::AnyError(e.into())),
                     None => {
-                        Err(ParseError::RightParenExpected(None))
+                        Err(ParseError::RightParenExpected(self.line, "EOF".into()))
                     }
+                    Some(Err(e)) => Err(e),
                 }
             }
             Some(Ok(Token::Bang)) => {
@@ -301,10 +306,9 @@ impl<'a> Parser<'a> {
                 let rhs = self.parse_terminal_or_group()?;
                 Ok(Ast::Unary(UnaryOp::Neg, rhs))
             }
-            Some(Ok(t)) => Err(ParseError::ExpressionExpected(Some(t.lexeme().to_string()))),
-            Some(Err(e)) =>
-                Err(ParseError::AnyError(e.into())),
-            None => Err(ParseError::ExpressionExpected(None)),
+            Some(Ok(t)) => Err(ParseError::ExpressionExpected(self.line, t.lexeme().into())),
+            Some(Err(e)) => Err(e),
+            None => Err(ParseError::ExpressionExpected(self.line, "EOF".to_string())),
         };
         tok.map(Rc::new)
     }

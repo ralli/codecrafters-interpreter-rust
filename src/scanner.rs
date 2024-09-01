@@ -180,6 +180,10 @@ impl<'a> crate::Scanner<'a> {
         }
     }
 
+    pub fn current_line(&self) -> usize {
+        self.line
+    }
+
     fn skip_comment(&mut self) {
         let Some((pos, '/')) = self.it.peek().copied() else { return; };
 
