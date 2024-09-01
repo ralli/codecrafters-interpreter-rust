@@ -186,11 +186,7 @@ impl<'a> Ast<'a> {
                 (Value::Number(a), Value::Number(b)) => Ast::compare(*op, a, b),
                 (Value::Bool(a), Value::Bool(b)) => Ast::compare(*op, a, b),
                 (Value::String(a), Value::String(b)) => Ast::compare(*op, a.as_str(), b.as_str()),
-                (l, r) => Err(anyhow!(
-                    "incompatible types for {op} {} {}",
-                    l.type_name(),
-                    r.type_name()
-                )),
+                _ => Err(anyhow!("Operands must be numbers.")),
             },
             Ast::Equality(op, left, right) => match (left.eval()?, right.eval()?) {
                 (Value::Number(a), Value::Number(b)) => Ast::equal_to(*op, a, b),
