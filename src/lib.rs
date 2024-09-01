@@ -29,6 +29,22 @@ pub enum Token<'a> {
     String(&'a str),
     Number(&'a str),
     Identifier(&'a str),
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Fun,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
 }
 
 impl<'a> Token<'a> {
@@ -56,6 +72,22 @@ impl<'a> Token<'a> {
             Token::String(_) => "STRING",
             Token::Number(_) => "NUMBER",
             Token::Identifier(_) => "IDENTIFIER",
+            Token::And => "AND",
+            Token::Class => "CLASS",
+            Token::Else => "ELSE",
+            Token::False => "FALSE",
+            Token::For => "FOR",
+            Token::Fun => "FUN",
+            Token::If => "IF",
+            Token::Nil => "NIL",
+            Token::Or => "OR",
+            Token::Print => "PRINT",
+            Token::Return => "RETURN",
+            Token::Super => "SUPER",
+            Token::This => "THIS",
+            Token::True => "TRUE",
+            Token::Var => "VAR",
+            Token::While => "WHILE",
         }
     }
 
@@ -83,6 +115,22 @@ impl<'a> Token<'a> {
             Token::String(s) => format!("{}{}{}", '"', s, '"').into(),
             Token::Number(s) => (*s).into(),
             Token::Identifier(s) => (*s).into(),
+            Token::And => "and".into(),
+            Token::Class => "class".into(),
+            Token::Else => "else".into(),
+            Token::False => "false".into(),
+            Token::For => "for".into(),
+            Token::Fun => "fun".into(),
+            Token::If => "if".into(),
+            Token::Nil => "nil".into(),
+            Token::Or => "or".into(),
+            Token::Print => "print".into(),
+            Token::Return => "return".into(),
+            Token::Super => "super".into(),
+            Token::This => "this".into(),
+            Token::True => "true".into(),
+            Token::Var => "var".into(),
+            Token::While => "while".into(),
         }
     }
 
@@ -167,11 +215,13 @@ impl<'a> Scanner<'a> {
                 self.it.next();
             }
         }
-        if let Some((end, _c)) = self.it.peek().copied() {
-            Some(Ok(Token::Number(&self.input[start..end])))
-        } else {
-            Some(Ok(Token::Number(&self.input[start..])))
-        }
+        let s =
+            if let Some((end, _c)) = self.it.peek().copied() {
+                &self.input[start..end]
+            } else {
+                &self.input[start..]
+            };
+        Some(Ok(Token::Number(s)))
     }
 
     fn scan_identifier(&mut self) -> Option<Result<Token<'a>, anyhow::Error>> {
@@ -179,11 +229,32 @@ impl<'a> Scanner<'a> {
         while let Some(true) = self.it.peek().map(|(_, c)| c.is_alphabetic() || c.is_digit(10) || *c == '_') {
             self.it.next();
         }
-        if let Some((end, _c)) = self.it.peek().copied() {
-            Some(Ok(Token::Identifier(&self.input[start..end])))
-        } else {
-            Some(Ok(Token::Identifier(&self.input[start..])))
-        }
+        let s =
+            if let Some((end, _c)) = self.it.peek().copied() {
+                &self.input[start..end]
+            } else {
+                &self.input[start..]
+            };
+        let tok = match s {
+            "and" => Token::And,
+            "class" => Token::Class,
+            "else" => Token::Else,
+            "false" => Token::False,
+            "for" => Token::For,
+            "fun" => Token::Fun,
+            "if" => Token::If,
+            "nil" => Token::Nil,
+            "or" => Token::Or,
+            "print" => Token::Print,
+            "return" => Token::Return,
+            "super" => Token::Super,
+            "this" => Token::This,
+            "true" => Token::True,
+            "var" => Token::Var,
+            "while" => Token::While,
+            _ => Token::Identifier(s),
+        };
+        Some(Ok(tok))
     }
 }
 
