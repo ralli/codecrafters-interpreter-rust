@@ -49,7 +49,7 @@ fn main() -> Result<(), anyhow::Error> {
         }
         Commands::Parse { filename } => {
             let file_contents = fs::read_to_string(&filename).with_context(|| format!("cannot load file {:?}", &filename))?;
-            let parser = codecrafters_interpreter::Parser::new(&file_contents);
+            let mut parser = codecrafters_interpreter::Parser::new(&file_contents);
             let result = parser.parse()?;
             println!("{result}");
         }
