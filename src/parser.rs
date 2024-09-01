@@ -21,12 +21,32 @@ impl fmt::Display for UnaryOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            BinaryOp::Add => '+',
+            BinaryOp::Sub => '-',
+            BinaryOp::Mul => '*',
+            BinaryOp::Div => '/',
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ast<'a> {
     Boolean(bool),
     Number(f64),
     String(&'a str),
     Group(Rc<Ast<'a>>),
     Unary(UnaryOp, Rc<Ast<'a>>),
+    Binary(BinaryOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Nil,
 }
 
@@ -44,6 +64,7 @@ impl<'a> fmt::Display for Ast<'a> {
             Ast::String(s) => write!(f, "{s}"),
             Ast::Group(inner) => write!(f, "(group {inner})"),
             Ast::Unary(op, rhs) => write!(f, "({op} {rhs})"),
+            Ast::Binary(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
             Ast::Nil => write!(f, "nil"),
         }
     }
@@ -64,12 +85,32 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-        let result = self.parse_terminal_or_group()?;
+        let result = self.parse_mul()?;
         match self.scanner.peek() {
             None => Ok(result),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}. end of input expected.", t)),
             _ => Err(anyhow!("end of input expected")),
         }
+    }
+
+    fn parse_mul(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+        let mut lhs = self.parse_terminal_or_group()?;
+        while let Some(true) = self.scanner.peek().map(|t| match t {
+            Ok(tok) => {
+                *tok == Token::Star || *tok == Token::Slash
+            }
+            _ => false
+        }) {
+            let op = self.scanner.next().unwrap()?;
+            let rhs = self.parse_mul()?;
+            let binary_op = match op {
+                Token::Star => BinaryOp::Mul,
+                Token::Slash => BinaryOp::Div,
+                _ => unreachable!()
+            };
+            lhs = Rc::new(Ast::Binary(binary_op, lhs, rhs));
+        }
+        Ok(lhs)
     }
 
     fn parse_terminal_or_group(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
@@ -98,7 +139,7 @@ impl<'a> Parser<'a> {
             }
             Some(Ok(Token::LeftParen)) => {
                 self.scanner.next();
-                let inner = self.parse_terminal_or_group()?;
+                let inner = self.parse_mul()?;
                 match self.scanner.peek() {
                     Some(Ok(Token::RightParen)) => {
                         self.scanner.next();
