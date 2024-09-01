@@ -108,6 +108,25 @@ impl<'a> Scanner<'a> {
             line: 1,
         }
     }
+
+    fn skip_comment(&mut self) {
+        let Some((pos, '/')) = self.it.peek() else { return; };
+
+        let mut rest = (&self.input[*pos..]).chars().skip(1);
+
+        if let Some(true) = rest.next().map(|c| c != '/') {
+            return;
+        }
+
+        while let Some(true) = self.it.peek().map(|(_, c)| *c != '\n') {
+            self.it.next();
+        }
+
+        if let Some(true) = self.it.peek().map(|(_, c)| *c == '\n') {
+            self.it.next();
+            self.line += 1;
+        }
+    }
 }
 
 impl<'a> Iterator for Scanner<'a> {
@@ -121,10 +140,12 @@ impl<'a> Iterator for Scanner<'a> {
             }
         }
 
+        self.skip_comment();
+
         let (_pos, c) = self.it.next()?;
         let line = self.line;
 
-        let mut bla = move |with_equal: Token<'a>, without_equal: Token<'a>| {
+        let mut if_token_has_equal = |with_equal: Token<'a>, without_equal: Token<'a>| {
             match self.it.peek() {
                 Some((_, '=')) => {
                     self.it.next();
@@ -135,14 +156,14 @@ impl<'a> Iterator for Scanner<'a> {
         };
 
         match c {
-            '!' => bla(Token::BangEqual, Token::Bang),
+            '!' => if_token_has_equal(Token::BangEqual, Token::Bang),
             ',' => Some(Ok(Token::Comma)),
             '.' => Some(Ok(Token::Dot)),
-            '=' => bla(Token::EqualEqual, Token::Equal),
-            '>' => bla(Token::GreaterEqual, Token::Greater),
+            '=' => if_token_has_equal(Token::EqualEqual, Token::Equal),
+            '>' => if_token_has_equal(Token::GreaterEqual, Token::Greater),
             '{' => Some(Ok(Token::LeftBrace)),
             '(' => Some(Ok(Token::LeftParen)),
-            '<' => bla(Token::LessEqual, Token::Less),
+            '<' => if_token_has_equal(Token::LessEqual, Token::Less),
             '-' => Some(Ok(Token::Minus)),
             '+' => Some(Ok(Token::Plus)),
             '}' => Some(Ok(Token::RightBrace)),
@@ -150,11 +171,7 @@ impl<'a> Iterator for Scanner<'a> {
             ';' => Some(Ok(Token::Semicolon)),
             '/' => Some(Ok(Token::Slash)),
             '*' => Some(Ok(Token::Star)),
-            _ => {
-
-                // eprintln!("[line {}] Error: Unexpected character: {}", line, c);
-                Some(Err(anyhow!("[line {}] Error: Unexpected character: {}", line, c)))
-            }
+            _ => Some(Err(anyhow!("[line {}] Error: Unexpected character: {}", line, c)))
         }
     }
 }
