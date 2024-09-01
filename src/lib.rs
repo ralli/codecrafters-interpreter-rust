@@ -164,8 +164,11 @@ impl<'a> Scanner<'a> {
                 self.it.next();
             }
         }
-        let (end, _c) = self.it.peek().copied()?;
-        Some(Ok(Token::Number(&self.input[start..end])))
+        if let Some((end, _c)) = self.it.peek().copied() {
+            Some(Ok(Token::Number(&self.input[start..end])))
+        } else {
+            Some(Ok(Token::Number(&self.input[start..])))
+        }
     }
 }
 
