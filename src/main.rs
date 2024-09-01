@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use codecrafters_interpreter::Scanner;
 use std::fs;
@@ -16,6 +17,8 @@ struct Cli {
 enum Commands {
     /// Tokenizes the input file
     Tokenize { filename: PathBuf },
+    /// Parses the input file
+    Parse { filename: PathBuf },
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -36,13 +39,19 @@ fn main() -> Result<(), anyhow::Error> {
                     Err(e) => {
                         eprintln!("{e}");
                         num_errors += 1
-                    },
+                    }
                 }
             }
             println!("EOF  null");
             if num_errors > 0 {
                 exit(65);
             }
+        }
+        Commands::Parse { filename } => {
+            let file_contents = fs::read_to_string(&filename).with_context(|| format!("cannot load file {:?}", &filename))?;
+            let parser = codecrafters_interpreter::Parser::new(&file_contents);
+            let result = parser.parse()?;
+            println!("{result}");
         }
     }
 
