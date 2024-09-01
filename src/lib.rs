@@ -28,6 +28,7 @@ pub enum Token<'a> {
     LeftParen,
     String(&'a str),
     Number(&'a str),
+    Identifier(&'a str),
 }
 
 impl<'a> Token<'a> {
@@ -54,10 +55,11 @@ impl<'a> Token<'a> {
             Token::Star => "STAR",
             Token::String(_) => "STRING",
             Token::Number(_) => "NUMBER",
+            Token::Identifier(_) => "IDENTIFIER",
         }
     }
 
-    pub fn lexeme(&self) -> Cow<'static, str> {
+    pub fn lexeme(&self) -> Cow<'a, str> {
         match self {
             Token::Bang => "!".into(),
             Token::BangEqual => "!=".into(),
@@ -79,13 +81,15 @@ impl<'a> Token<'a> {
             Token::Slash => "/".into(),
             Token::Star => "*".into(),
             Token::String(s) => format!("{}{}{}", '"', s, '"').into(),
-            Token::Number(s) => s.to_string().into(),
+            Token::Number(s) => (*s).into(),
+            Token::Identifier(s) => (*s).into(),
         }
     }
 
-    pub fn repr(&self) -> Cow<'static, str> {
+    pub fn repr(&self) -> Cow<'a, str> {
         match self {
-            Token::String(s) => s.to_string().into(),
+            Token::String(s) => (*s).into(),
+            Token::Identifier(s) => (*s).into(),
             Token::Number(s) => {
                 let x = s.parse::<f64>().unwrap();
                 if x.trunc() == x {
@@ -170,6 +174,18 @@ impl<'a> Scanner<'a> {
             Some(Ok(Token::Number(&self.input[start..])))
         }
     }
+
+    fn scan_identifier(&mut self) -> Option<Result<Token<'a>, anyhow::Error>> {
+        let (start, _c) = self.it.peek().copied()?;
+        while let Some(true) = self.it.peek().map(|(_, c)| c.is_alphabetic() || c.is_digit(10) || *c == '_') {
+            self.it.next();
+        }
+        if let Some((end, _c)) = self.it.peek().copied() {
+            Some(Ok(Token::Identifier(&self.input[start..end])))
+        } else {
+            Some(Ok(Token::Identifier(&self.input[start..])))
+        }
+    }
 }
 
 impl<'a> Iterator for Scanner<'a> {
@@ -187,6 +203,10 @@ impl<'a> Iterator for Scanner<'a> {
 
         if let Some(true) = self.it.peek().map(|(_, c)| c.is_digit(10)) {
             return self.scan_number();
+        }
+
+        if let Some(true) = self.it.peek().map(|(_, c)| c.is_alphabetic() || *c == '_') {
+            return self.scan_identifier();
         }
 
         let (_pos, c) = self.it.next()?;
