@@ -114,7 +114,7 @@ impl<'a> Scanner<'a> {
 
         let mut rest = (&self.input[pos..]).chars().skip(1);
 
-        let Some('/') = rest.next() else {return;};
+        let Some('/') = rest.next() else { return; };
 
         while let Some(true) = self.it.peek().map(|(_, c)| *c != '\n') {
             self.it.next();
@@ -124,6 +124,22 @@ impl<'a> Scanner<'a> {
             self.it.next();
             self.line += 1;
         }
+    }
+
+    fn scan_string(&mut self) -> Option<Result<Token<'a>, anyhow::Error>> {
+        let Some((start, _c)) = self.it.peek().copied() else {
+            return Some(Err(anyhow!("[line {}] Error: Unterminated string.", self.line)));
+        };
+        while let Some(true) = self.it.peek().map(|(_, c)| *c != '"') {
+            let (_, c) = self.it.next()?;
+            if c == '\n' {
+                self.line += 1;
+            }
+        }
+        let Some((end, '"')) = self.it.next() else {
+            return Some(Err(anyhow!("[line {}] Error: Unterminated string.", self.line)));
+        };
+        Some(Ok(Token::String(&self.input[start..end])))
     }
 }
 
@@ -169,6 +185,7 @@ impl<'a> Iterator for Scanner<'a> {
             ';' => Some(Ok(Token::Semicolon)),
             '/' => Some(Ok(Token::Slash)),
             '*' => Some(Ok(Token::Star)),
+            '"' => self.scan_string(),
             _ => Some(Err(anyhow!("[line {}] Error: Unexpected character: {}", line, c)))
         }
     }
