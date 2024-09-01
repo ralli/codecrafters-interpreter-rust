@@ -85,12 +85,32 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-        let result = self.parse_mul()?;
+        let result = self.parse_add()?;
         match self.scanner.peek() {
             None => Ok(result),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}. end of input expected.", t)),
             _ => Err(anyhow!("end of input expected")),
         }
+    }
+
+    fn parse_add(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+        let mut lhs = self.parse_mul()?;
+        while let Some(true) = self.scanner.peek().map(|t| match t {
+            Ok(tok) => {
+                *tok == Token::Plus || *tok == Token::Minus
+            }
+            _ => false
+        }) {
+            let op = self.scanner.next().unwrap()?;
+            let rhs = self.parse_mul()?;
+            let binary_op = match op {
+                Token::Plus => BinaryOp::Add,
+                Token::Minus => BinaryOp::Sub,
+                _ => unreachable!()
+            };
+            lhs = Rc::new(Ast::Binary(binary_op, lhs, rhs));
+        }
+        Ok(lhs)
     }
 
     fn parse_mul(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
@@ -139,7 +159,7 @@ impl<'a> Parser<'a> {
             }
             Some(Ok(Token::LeftParen)) => {
                 self.scanner.next();
-                let inner = self.parse_mul()?;
+                let inner = self.parse_add()?;
                 match self.scanner.peek() {
                     Some(Ok(Token::RightParen)) => {
                         self.scanner.next();
