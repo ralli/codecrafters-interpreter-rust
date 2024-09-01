@@ -58,7 +58,7 @@ fn main() -> Result<(), anyhow::Error> {
                 Ok(result) => println!("{result}"),
                 Err(e) => {
                     eprintln!("{e}");
-                    exit(65);
+                    exit(70);
                 }
             };
         }

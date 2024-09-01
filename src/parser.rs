@@ -162,7 +162,7 @@ impl<'a> Ast<'a> {
                 },
                 UnaryOp::Neg => match right.eval()? {
                     Value::Number(x) => Ok(Value::Number(-x)),
-                    x => Err(anyhow!("expected number. got {}", x.type_name())),
+                    _ => Err(anyhow!("Operand must be a number.")),
                 },
             },
             Ast::Binary(op, left, right) => match (left.eval()?, right.eval()?) {
