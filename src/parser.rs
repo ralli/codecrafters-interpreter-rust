@@ -127,13 +127,7 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Value::Bool(b) => write!(f, "{b}"),
-            Value::Number(x) => {
-                if x.trunc() == *x {
-                    write!(f, "{x:.1}")
-                } else {
-                    write!(f, "{x}")
-                }
-            }
+            Value::Number(x) => write!(f, "{x}"),
             Value::String(s) => write!(f, "{s}"),
             Value::Nil => write!(f, "nil"),
         }
