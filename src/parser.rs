@@ -7,6 +7,7 @@ use std::iter::Peekable;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ast {
     Boolean(bool),
+    Number(f64),
     Nil,
 }
 
@@ -14,6 +15,13 @@ impl fmt::Display for Ast {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Ast::Boolean(v) => write!(f, "{}", v),
+            Ast::Number(x) => {
+                if x.trunc() == *x {
+                    write!(f, "{:.1}", x)
+                } else {
+                    write!(f, "{}", x)
+                }
+            }
             Ast::Nil => write!(f, "nil"),
         }
     }
@@ -38,6 +46,7 @@ impl<'a> Parser<'a> {
             Some(Ok(Token::True)) => Ok(Ast::Boolean(true)),
             Some(Ok(Token::False)) => Ok(Ast::Boolean(false)),
             Some(Ok(Token::Nil)) => Ok(Ast::Nil),
+            Some(Ok(Token::Number(s))) => Ok(Ast::Number(s.parse::<f64>().unwrap())),
             Some(Err(e)) => Err(e),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}", t)),
             None => Err(anyhow!("empty input")),
