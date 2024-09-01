@@ -6,11 +6,27 @@ use std::iter::Peekable;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum UnaryOp {
+    Not,
+    Neg,
+}
+
+impl fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            UnaryOp::Neg => '-',
+            UnaryOp::Not => '!',
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ast<'a> {
     Boolean(bool),
     Number(f64),
     String(&'a str),
     Group(Rc<Ast<'a>>),
+    Unary(UnaryOp, Rc<Ast<'a>>),
     Nil,
 }
 
@@ -27,6 +43,7 @@ impl<'a> fmt::Display for Ast<'a> {
             }
             Ast::String(s) => write!(f, "{s}"),
             Ast::Group(inner) => write!(f, "(group {inner})"),
+            Ast::Unary(op, rhs) => write!(f, "({op} {rhs})"),
             Ast::Nil => write!(f, "nil"),
         }
     }
@@ -34,20 +51,20 @@ impl<'a> fmt::Display for Ast<'a> {
 
 #[derive(Debug)]
 pub struct Parser<'a> {
-    input: &'a str,
+    // input: &'a str,
     scanner: Peekable<Scanner<'a>>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
-            input,
+            // input,
             scanner: Scanner::new(input).peekable(),
         }
     }
 
-    pub fn parse(&mut self) -> Result<Ast<'a>, anyhow::Error> {
-        let result = self.parse_terminal_or_group()?;
+    pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+        let result = self.parse_unary()?;
         match self.scanner.peek() {
             None => Ok(result),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}. end of input expected.", t)),
@@ -55,7 +72,22 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_terminal_or_group(&mut self) -> Result<Ast<'a>, anyhow::Error> {
+    fn parse_unary(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+        match self.scanner.peek() {
+            Some(Ok(Token::Bang)) => {
+                self.scanner.next();
+                let rhs = self.parse_terminal_or_group()?;
+                Ok(Rc::new(Ast::Unary(UnaryOp::Not, rhs)))
+            }
+            Some(Ok(Token::Minus)) => {
+                self.scanner.next();
+                let rhs = self.parse_terminal_or_group()?;
+                Ok(Rc::new(Ast::Unary(UnaryOp::Neg, rhs)))
+            }
+            _ => self.parse_terminal_or_group()
+        }
+    }
+    fn parse_terminal_or_group(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
         let tok = match self.scanner.peek() {
             Some(Ok(Token::True)) => {
                 self.scanner.next();
@@ -81,11 +113,11 @@ impl<'a> Parser<'a> {
             }
             Some(Ok(Token::LeftParen)) => {
                 self.scanner.next();
-                let inner = self.parse_terminal_or_group()?;
+                let inner = self.parse_unary()?;
                 match self.scanner.peek() {
                     Some(Ok(Token::RightParen)) => {
                         self.scanner.next();
-                        Ok(Ast::Group(Rc::new(inner)))
+                        Ok(Ast::Group(inner))
                     }
                     _ => {
                         Err(anyhow!("Expected ')'"))
@@ -93,7 +125,7 @@ impl<'a> Parser<'a> {
                 }
             }
             Some(Ok(t)) => Err(anyhow!("invalid token: {}", t)),
-            Some(Err(e)) => {
+            Some(Err(_)) => {
                 match self.scanner.next() {
                     Some(Err(e)) => Err(e),
                     _ => panic!("bla"),
@@ -101,6 +133,6 @@ impl<'a> Parser<'a> {
             }
             None => Err(anyhow!("empty input")),
         };
-        tok
+        tok.map(Rc::new)
     }
 }
