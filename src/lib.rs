@@ -139,7 +139,7 @@ impl<'a> Iterator for Scanner<'a> {
             ',' => Some(Ok(Token::Comma)),
             '.' => Some(Ok(Token::Dot)),
             '=' => bla(Token::EqualEqual, Token::Equal),
-            '>' => bla(Token::Greater, Token::GreaterEqual),
+            '>' => bla(Token::GreaterEqual, Token::Greater),
             '{' => Some(Ok(Token::LeftBrace)),
             '(' => Some(Ok(Token::LeftParen)),
             '<' => bla(Token::LessEqual, Token::Less),
