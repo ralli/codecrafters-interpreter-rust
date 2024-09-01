@@ -157,11 +157,12 @@ impl<'a> Ast<'a> {
             Ast::Unary(op, right) => match op {
                 UnaryOp::Not => match right.eval()? {
                     Value::Bool(b) => Ok(Value::Bool(!b)),
-                    x => Err(anyhow!("expected boolean. got {}", x.type_name())),
+                    Value::Nil => Ok(Value::Bool(true)),
+                    _ => Ok(Value::Bool(false)),
                 },
                 UnaryOp::Neg => match right.eval()? {
                     Value::Number(x) => Ok(Value::Number(-x)),
-                    x => Err(anyhow!("expected boolean. got {}", x.type_name())),
+                    x => Err(anyhow!("expected number. got {}", x.type_name())),
                 },
             },
             Ast::Binary(op, left, right) => match (left.eval()?, right.eval()?) {
