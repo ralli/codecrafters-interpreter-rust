@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-        let result = self.parse_unary()?;
+        let result = self.parse_terminal_or_group()?;
         match self.scanner.peek() {
             None => Ok(result),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}. end of input expected.", t)),
@@ -72,21 +72,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_unary(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-        match self.scanner.peek() {
-            Some(Ok(Token::Bang)) => {
-                self.scanner.next();
-                let rhs = self.parse_terminal_or_group()?;
-                Ok(Rc::new(Ast::Unary(UnaryOp::Not, rhs)))
-            }
-            Some(Ok(Token::Minus)) => {
-                self.scanner.next();
-                let rhs = self.parse_terminal_or_group()?;
-                Ok(Rc::new(Ast::Unary(UnaryOp::Neg, rhs)))
-            }
-            _ => self.parse_terminal_or_group()
-        }
-    }
     fn parse_terminal_or_group(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
         let tok = match self.scanner.peek() {
             Some(Ok(Token::True)) => {
@@ -113,7 +98,7 @@ impl<'a> Parser<'a> {
             }
             Some(Ok(Token::LeftParen)) => {
                 self.scanner.next();
-                let inner = self.parse_unary()?;
+                let inner = self.parse_terminal_or_group()?;
                 match self.scanner.peek() {
                     Some(Ok(Token::RightParen)) => {
                         self.scanner.next();
@@ -123,6 +108,16 @@ impl<'a> Parser<'a> {
                         Err(anyhow!("Expected ')'"))
                     }
                 }
+            }
+            Some(Ok(Token::Bang)) => {
+                self.scanner.next();
+                let rhs = self.parse_terminal_or_group()?;
+                Ok(Ast::Unary(UnaryOp::Not, rhs))
+            }
+            Some(Ok(Token::Minus)) => {
+                self.scanner.next();
+                let rhs = self.parse_terminal_or_group()?;
+                Ok(Ast::Unary(UnaryOp::Neg, rhs))
             }
             Some(Ok(t)) => Err(anyhow!("invalid token: {}", t)),
             Some(Err(_)) => {
