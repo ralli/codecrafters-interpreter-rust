@@ -27,6 +27,7 @@ pub enum Token<'a> {
     Star,
     LeftParen,
     String(&'a str),
+    Number(&'a str),
 }
 
 impl<'a> Token<'a> {
@@ -52,6 +53,7 @@ impl<'a> Token<'a> {
             Token::Slash => "SLASH",
             Token::Star => "STAR",
             Token::String(_) => "STRING",
+            Token::Number(_) => "NUMBER",
         }
     }
 
@@ -77,13 +79,22 @@ impl<'a> Token<'a> {
             Token::Slash => "/".into(),
             Token::Star => "*".into(),
             Token::String(s) => format!("{}{}{}", '"', s, '"').into(),
+            Token::Number(s) => s.to_string().into(),
         }
     }
 
-    pub fn repr(&self) -> &'a str {
+    pub fn repr(&self) -> Cow<'static, str> {
         match self {
-            Token::String(s) => s,
-            _ => "null"
+            Token::String(s) => s.to_string().into(),
+            Token::Number(s) => {
+                let x = s.parse::<f64>().unwrap();
+                if x.trunc() == x {
+                    format!("{:.1}", x).into()
+                } else {
+                    format!("{}", x).into()
+                }
+            }
+            _ => "null".into()
         }
     }
 }
@@ -141,6 +152,21 @@ impl<'a> Scanner<'a> {
         };
         Some(Ok(Token::String(&self.input[start..end])))
     }
+
+    fn scan_number(&mut self) -> Option<Result<Token<'a>, anyhow::Error>> {
+        let (start, _c) = self.it.peek().copied()?;
+        while let Some(true) = self.it.peek().map(|(_, c)| c.is_digit(10)) {
+            self.it.next();
+        }
+        if let Some((_, '.')) = self.it.peek() {
+            self.it.next();
+            while let Some(true) = self.it.peek().map(|(_, c)| c.is_digit(10)) {
+                self.it.next();
+            }
+        }
+        let (end, _c) = self.it.peek().copied()?;
+        Some(Ok(Token::Number(&self.input[start..end])))
+    }
 }
 
 impl<'a> Iterator for Scanner<'a> {
@@ -156,6 +182,10 @@ impl<'a> Iterator for Scanner<'a> {
 
         self.skip_comment();
 
+        if let Some(true) = self.it.peek().map(|(_, c)| c.is_digit(10)) {
+            return self.scan_number();
+        }
+
         let (_pos, c) = self.it.next()?;
         let line = self.line;
 
@@ -168,6 +198,7 @@ impl<'a> Iterator for Scanner<'a> {
                 _ => Some(Ok(without_equal))
             }
         };
+
 
         match c {
             '!' => if_token_has_equal(Token::BangEqual, Token::Bang),
