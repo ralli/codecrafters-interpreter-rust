@@ -5,13 +5,14 @@ use std::fmt::Formatter;
 use std::iter::Peekable;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Ast {
+pub enum Ast<'a> {
     Boolean(bool),
     Number(f64),
+    String(&'a str),
     Nil,
 }
 
-impl fmt::Display for Ast {
+impl<'a> fmt::Display for Ast<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Ast::Boolean(v) => write!(f, "{}", v),
@@ -22,6 +23,7 @@ impl fmt::Display for Ast {
                     write!(f, "{}", x)
                 }
             }
+            Ast::String(s) => write!(f, "{s}"),
             Ast::Nil => write!(f, "nil"),
         }
     }
@@ -41,12 +43,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(mut self) -> Result<Ast, anyhow::Error> {
+    pub fn parse(mut self) -> Result<Ast<'a>, anyhow::Error> {
         match self.scanner.next() {
             Some(Ok(Token::True)) => Ok(Ast::Boolean(true)),
             Some(Ok(Token::False)) => Ok(Ast::Boolean(false)),
             Some(Ok(Token::Nil)) => Ok(Ast::Nil),
             Some(Ok(Token::Number(s))) => Ok(Ast::Number(s.parse::<f64>().unwrap())),
+            Some(Ok(Token::String(s))) => Ok(Ast::String(s)),
             Some(Err(e)) => Err(e),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}", t)),
             None => Err(anyhow!("empty input")),
