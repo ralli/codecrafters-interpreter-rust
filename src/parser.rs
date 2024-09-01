@@ -102,7 +102,7 @@ impl<'a> Parser<'a> {
             _ => false
         }) {
             let op = self.scanner.next().unwrap()?;
-            let rhs = self.parse_mul()?;
+            let rhs = self.parse_terminal_or_group()?;
             let binary_op = match op {
                 Token::Star => BinaryOp::Mul,
                 Token::Slash => BinaryOp::Div,
