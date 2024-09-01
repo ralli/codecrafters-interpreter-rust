@@ -40,6 +40,25 @@ impl fmt::Display for BinaryOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum ComparisonOp {
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+}
+
+impl fmt::Display for ComparisonOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            ComparisonOp::Less => "<",
+            ComparisonOp::LessEqual => "<=",
+            ComparisonOp::Greater => ">",
+            ComparisonOp::GreaterEqual => ">=",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ast<'a> {
     Boolean(bool),
     Number(f64),
@@ -47,6 +66,7 @@ pub enum Ast<'a> {
     Group(Rc<Ast<'a>>),
     Unary(UnaryOp, Rc<Ast<'a>>),
     Binary(BinaryOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
+    Comparison(ComparisonOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Nil,
 }
 
@@ -65,6 +85,7 @@ impl<'a> fmt::Display for Ast<'a> {
             Ast::Group(inner) => write!(f, "(group {inner})"),
             Ast::Unary(op, rhs) => write!(f, "({op} {rhs})"),
             Ast::Binary(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
+            Ast::Comparison(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
             Ast::Nil => write!(f, "nil"),
         }
     }
@@ -85,13 +106,36 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-        let result = self.parse_add()?;
+        let result = self.parse_relational()?;
         match self.scanner.peek() {
             None => Ok(result),
             Some(Ok(t)) => Err(anyhow!("invalid token: {}. end of input expected.", t)),
             _ => Err(anyhow!("end of input expected")),
         }
     }
+
+    fn parse_relational(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+        let mut lhs = self.parse_add()?;
+        while let Some(true) = self.scanner.peek().map(|t| match t {
+            Ok(tok) => {
+                *tok == Token::Less || *tok == Token::LessEqual || *tok == Token::Greater || *tok == Token::GreaterEqual
+            }
+            _ => false
+        }) {
+            let op = self.scanner.next().unwrap()?;
+            let rhs = self.parse_add()?;
+            let binary_op = match op {
+                Token::Less => ComparisonOp::Less,
+                Token::LessEqual => ComparisonOp::LessEqual,
+                Token::Greater => ComparisonOp::Greater,
+                Token::GreaterEqual => ComparisonOp::GreaterEqual,
+                _ => unreachable!()
+            };
+            lhs = Rc::new(Ast::Comparison(binary_op, lhs, rhs));
+        }
+        Ok(lhs)
+    }
+
 
     fn parse_add(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
         let mut lhs = self.parse_mul()?;
@@ -159,7 +203,7 @@ impl<'a> Parser<'a> {
             }
             Some(Ok(Token::LeftParen)) => {
                 self.scanner.next();
-                let inner = self.parse_add()?;
+                let inner = self.parse_relational()?;
                 match self.scanner.peek() {
                     Some(Ok(Token::RightParen)) => {
                         self.scanner.next();
