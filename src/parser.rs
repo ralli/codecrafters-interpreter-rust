@@ -196,11 +196,8 @@ impl<'a> Ast<'a> {
                 (Value::Number(a), Value::Number(b)) => Ast::equal_to(*op, a, b),
                 (Value::Bool(a), Value::Bool(b)) => Ast::equal_to(*op, a, b),
                 (Value::String(a), Value::String(b)) => Ast::equal_to(*op, a.as_str(), b.as_str()),
-                (l, r) => Err(anyhow!(
-                    "incompatible types for {op} {} {}",
-                    l.type_name(),
-                    r.type_name()
-                )),
+                (Value::Nil, Value::Nil) => Ok(Value::Bool(true)),
+                _ => Ok(Value::Bool(false)),
             },
             Ast::Nil => Ok(Value::Nil),
         }
