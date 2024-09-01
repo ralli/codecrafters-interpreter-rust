@@ -50,8 +50,14 @@ fn main() -> Result<(), anyhow::Error> {
         Commands::Parse { filename } => {
             let file_contents = fs::read_to_string(&filename).with_context(|| format!("cannot load file {:?}", &filename))?;
             let mut parser = codecrafters_interpreter::Parser::new(&file_contents);
-            let result = parser.parse()?;
-            println!("{result}");
+            let result = parser.parse();
+            match result {
+                Ok(result) =>println!("{result}"),
+                Err(e) => {
+                    eprintln!("{e}");
+                    exit(65);
+                }
+            };
         }
     }
 

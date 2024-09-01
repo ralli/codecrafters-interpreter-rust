@@ -1,9 +1,24 @@
-use crate::{Scanner, Token};
-use anyhow::anyhow;
+use crate::{Scanner, ScannerError, Token};
 use std::fmt;
 use std::fmt::Formatter;
-use std::iter::Peekable;
 use std::rc::Rc;
+use anyhow::anyhow;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("{0}")]
+    Scanner(#[from] ScannerError),
+
+    #[error("{0}")]
+    AnyError(#[from] anyhow::Error),
+    #[error("end of input expected. got {0:?}")]
+    EOFExpected(Option<String>),
+    #[error("expression expected. got {0:?}")]
+    ExpressionExpected(Option<String>),
+    #[error("')' expected. got {0:?}")]
+    RightParenExpected(Option<String>),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
@@ -110,40 +125,56 @@ impl<'a> fmt::Display for Ast<'a> {
 
 #[derive(Debug)]
 pub struct Parser<'a> {
-    // input: &'a str,
-    scanner: Peekable<Scanner<'a>>,
+    scanner: Scanner<'a>,
+    current: Option<Result<Token<'a>, ScannerError>>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             // input,
-            scanner: Scanner::new(input).peekable(),
+            scanner: Scanner::new(input),
+            current: None,
         }
     }
 
-    pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+    pub fn parse(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
+        self.next();
         let result = self.parse_expression()?;
-        match self.scanner.peek() {
+        match self.peek() {
             None => Ok(result),
-            Some(Ok(t)) => Err(anyhow!("invalid token: {}. end of input expected.", t)),
-            _ => Err(anyhow!("end of input expected")),
+            Some(Ok(t)) => Err(ParseError::EOFExpected(Some(t.lexeme().to_string()))),
+            Some(Err(e)) => Err(ParseError::AnyError(e.into())),
         }
     }
 
-    fn parse_expression(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-       self.parse_equality()
+    fn next(&mut self) -> Option<Result<&Token<'a>, ParseError>> {
+        self.current = self.scanner.next();
+        self.peek()
     }
 
-    fn parse_equality(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+    fn peek(&self) -> Option<Result<&Token<'a>, ParseError>> {
+        match self.current.as_ref() {
+            Some(Ok(bla)) => Some(Ok(bla)),
+            Some(Err(e)) => Some(Err(ParseError::AnyError(anyhow!("{}", e.to_string())))),
+            None => None,
+        }
+    }
+
+    fn parse_expression(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
+        self.parse_equality()
+    }
+
+    fn parse_equality(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         let mut lhs = self.parse_relational()?;
-        while let Some(true) = self.scanner.peek().map(|t| match t {
+        while let Some(true) = self.peek().map(|t| match t {
             Ok(tok) => {
                 *tok == Token::EqualEqual || *tok == Token::BangEqual
             }
             _ => false
         }) {
-            let op = self.scanner.next().unwrap()?;
+            self.next();
+            let op = self.peek().unwrap().copied()?;
             let rhs = self.parse_relational()?;
             let binary_op = match op {
                 Token::EqualEqual => EqualityOp::Equal,
@@ -155,15 +186,15 @@ impl<'a> Parser<'a> {
         Ok(lhs)
     }
 
-    fn parse_relational(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+    fn parse_relational(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         let mut lhs = self.parse_add()?;
-        while let Some(true) = self.scanner.peek().map(|t| match t {
+        while let Some(true) = self.peek().map(|t| match t {
             Ok(tok) => {
                 *tok == Token::Less || *tok == Token::LessEqual || *tok == Token::Greater || *tok == Token::GreaterEqual
             }
             _ => false
         }) {
-            let op = self.scanner.next().unwrap()?;
+            let op = self.peek().unwrap().copied()?;
             let rhs = self.parse_add()?;
             let binary_op = match op {
                 Token::Less => ComparisonOp::Less,
@@ -178,15 +209,16 @@ impl<'a> Parser<'a> {
     }
 
 
-    fn parse_add(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+    fn parse_add(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         let mut lhs = self.parse_mul()?;
-        while let Some(true) = self.scanner.peek().map(|t| match t {
+        while let Some(true) = self.peek().map(|t| match t {
             Ok(tok) => {
                 *tok == Token::Plus || *tok == Token::Minus
             }
             _ => false
         }) {
-            let op = self.scanner.next().unwrap()?;
+            self.next();
+            let op = self.peek().unwrap().copied()?;
             let rhs = self.parse_mul()?;
             let binary_op = match op {
                 Token::Plus => BinaryOp::Add,
@@ -198,15 +230,15 @@ impl<'a> Parser<'a> {
         Ok(lhs)
     }
 
-    fn parse_mul(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
+    fn parse_mul(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         let mut lhs = self.parse_terminal_or_group()?;
-        while let Some(true) = self.scanner.peek().map(|t| match t {
+        while let Some(true) = self.peek().map(|t| match t {
             Ok(tok) => {
                 *tok == Token::Star || *tok == Token::Slash
             }
             _ => false
         }) {
-            let op = self.scanner.next().unwrap()?;
+            let op = self.next().unwrap().copied()?;
             let rhs = self.parse_terminal_or_group()?;
             let binary_op = match op {
                 Token::Star => BinaryOp::Mul,
@@ -218,61 +250,61 @@ impl<'a> Parser<'a> {
         Ok(lhs)
     }
 
-    fn parse_terminal_or_group(&mut self) -> Result<Rc<Ast<'a>>, anyhow::Error> {
-        let tok = match self.scanner.peek() {
+    fn parse_terminal_or_group(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
+        let tok = match self.peek() {
             Some(Ok(Token::True)) => {
-                self.scanner.next();
+                self.next();
                 Ok(Ast::Boolean(true))
             }
             Some(Ok(Token::False)) => {
-                self.scanner.next();
+                self.next();
                 Ok(Ast::Boolean(false))
             }
             Some(Ok(Token::Nil)) => {
-                self.scanner.next();
+                self.next();
                 Ok(Ast::Nil)
             }
             Some(Ok(Token::Number(s))) => {
                 let res = Ok(Ast::Number(s.parse::<f64>().unwrap()));
-                self.scanner.next();
+                self.next();
                 res
             }
             Some(Ok(Token::String(s))) => {
                 let res = Ok(Ast::String(s));
-                self.scanner.next();
+                self.next();
                 res
             }
             Some(Ok(Token::LeftParen)) => {
-                self.scanner.next();
+                self.next();
                 let inner = self.parse_expression()?;
-                match self.scanner.peek() {
+                match self.peek() {
                     Some(Ok(Token::RightParen)) => {
-                        self.scanner.next();
+                        self.next();
                         Ok(Ast::Group(inner))
                     }
-                    _ => {
-                        Err(anyhow!("Expected ')'"))
+                    Some(Ok(t)) => {
+                        Err(ParseError::RightParenExpected(Some(t.lexeme().to_string())))
+                    }
+                    Some(Err(e)) => Err(ParseError::AnyError(e.into())),
+                    None => {
+                        Err(ParseError::RightParenExpected(None))
                     }
                 }
             }
             Some(Ok(Token::Bang)) => {
-                self.scanner.next();
+                self.next();
                 let rhs = self.parse_terminal_or_group()?;
                 Ok(Ast::Unary(UnaryOp::Not, rhs))
             }
             Some(Ok(Token::Minus)) => {
-                self.scanner.next();
+                self.next();
                 let rhs = self.parse_terminal_or_group()?;
                 Ok(Ast::Unary(UnaryOp::Neg, rhs))
             }
-            Some(Ok(t)) => Err(anyhow!("invalid token: {}", t)),
-            Some(Err(_)) => {
-                match self.scanner.next() {
-                    Some(Err(e)) => Err(e),
-                    _ => panic!("bla"),
-                }
-            }
-            None => Err(anyhow!("empty input")),
+            Some(Ok(t)) => Err(ParseError::ExpressionExpected(Some(t.lexeme().to_string()))),
+            Some(Err(e)) =>
+                Err(ParseError::AnyError(e.into())),
+            None => Err(ParseError::ExpressionExpected(None)),
         };
         tok.map(Rc::new)
     }

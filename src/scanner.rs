@@ -1,11 +1,19 @@
-use anyhow::anyhow;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
 use std::iter::{Enumerate, Peekable};
 use std::str::Chars;
+use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Error)]
+pub enum ScannerError {
+    #[error("[line {}] Error: Unexpected character: {}", line, c)]
+    InvalidCharacter { line: usize, c: char },
+
+    #[error("[line {}] Error: Unterminated string.", line)]
+    UnterminatedString { line: usize },
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Token<'a> {
     Bang,
     BangEqual,
@@ -189,9 +197,9 @@ impl<'a> crate::Scanner<'a> {
         }
     }
 
-    fn scan_string(&mut self) -> Option<Result<crate::Token<'a>, anyhow::Error>> {
+    fn scan_string(&mut self) -> Option<Result<crate::Token<'a>, ScannerError>> {
         let Some((start, _c)) = self.it.peek().copied() else {
-            return Some(Err(anyhow!("[line {}] Error: Unterminated string.", self.line)));
+            return Some(Err(ScannerError::UnterminatedString { line: self.line }));
         };
         while let Some(true) = self.it.peek().map(|(_, c)| *c != '"') {
             let (_, c) = self.it.next()?;
@@ -200,12 +208,12 @@ impl<'a> crate::Scanner<'a> {
             }
         }
         let Some((end, '"')) = self.it.next() else {
-            return Some(Err(anyhow!("[line {}] Error: Unterminated string.", self.line)));
+            return Some(Err(ScannerError::UnterminatedString { line: self.line }));
         };
         Some(Ok(crate::Token::String(&self.input[start..end])))
     }
 
-    fn scan_number(&mut self) -> Option<Result<crate::Token<'a>, anyhow::Error>> {
+    fn scan_number(&mut self) -> Option<Result<crate::Token<'a>, ScannerError>> {
         let (start, _c) = self.it.peek().copied()?;
         while let Some(true) = self.it.peek().map(|(_, c)| c.is_ascii_digit()) {
             self.it.next();
@@ -225,7 +233,7 @@ impl<'a> crate::Scanner<'a> {
         Some(Ok(crate::Token::Number(s)))
     }
 
-    fn scan_identifier(&mut self) -> Option<Result<crate::Token<'a>, anyhow::Error>> {
+    fn scan_identifier(&mut self) -> Option<Result<crate::Token<'a>, ScannerError>> {
         let (start, _c) = self.it.peek().copied()?;
         while let Some(true) = self.it.peek().map(|(_, c)| c.is_alphabetic() || c.is_ascii_digit() || *c == '_') {
             self.it.next();
@@ -260,7 +268,7 @@ impl<'a> crate::Scanner<'a> {
 }
 
 impl<'a> Iterator for crate::Scanner<'a> {
-    type Item = Result<crate::Token<'a>, anyhow::Error>;
+    type Item = Result<crate::Token<'a>, ScannerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(true) = self.it.peek().map(|(_pos, c)| c.is_whitespace()) {
@@ -281,7 +289,6 @@ impl<'a> Iterator for crate::Scanner<'a> {
         }
 
         let (_pos, c) = self.it.next()?;
-        let line = self.line;
 
         let mut if_token_has_equal = |with_equal: crate::Token<'a>, without_equal: crate::Token<'a>| {
             match self.it.peek() {
@@ -311,7 +318,7 @@ impl<'a> Iterator for crate::Scanner<'a> {
             '/' => Some(Ok(crate::Token::Slash)),
             '*' => Some(Ok(crate::Token::Star)),
             '"' => self.scan_string(),
-            _ => Some(Err(anyhow!("[line {}] Error: Unexpected character: {}", line, c)))
+            _ => Some(Err(ScannerError::InvalidCharacter { line: self.line, c }))
         }
     }
 }
