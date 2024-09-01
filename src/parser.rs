@@ -28,10 +28,14 @@ pub enum UnaryOp {
 
 impl fmt::Display for UnaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            UnaryOp::Neg => '-',
-            UnaryOp::Not => '!',
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                UnaryOp::Neg => '-',
+                UnaryOp::Not => '!',
+            }
+        )
     }
 }
 
@@ -45,16 +49,20 @@ pub enum BinaryOp {
 
 impl fmt::Display for BinaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            BinaryOp::Add => '+',
-            BinaryOp::Sub => '-',
-            BinaryOp::Mul => '*',
-            BinaryOp::Div => '/',
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                BinaryOp::Add => '+',
+                BinaryOp::Sub => '-',
+                BinaryOp::Mul => '*',
+                BinaryOp::Div => '/',
+            }
+        )
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ComparisonOp {
     Less,
     LessEqual,
@@ -64,16 +72,20 @@ pub enum ComparisonOp {
 
 impl fmt::Display for ComparisonOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            ComparisonOp::Less => "<",
-            ComparisonOp::LessEqual => "<=",
-            ComparisonOp::Greater => ">",
-            ComparisonOp::GreaterEqual => ">=",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                ComparisonOp::Less => "<",
+                ComparisonOp::LessEqual => "<=",
+                ComparisonOp::Greater => ">",
+                ComparisonOp::GreaterEqual => ">=",
+            }
+        )
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum EqualityOp {
     Equal,
     NotEqual,
@@ -81,10 +93,50 @@ pub enum EqualityOp {
 
 impl fmt::Display for EqualityOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            EqualityOp::Equal => "==",
-            EqualityOp::NotEqual => "!=",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                EqualityOp::Equal => "==",
+                EqualityOp::NotEqual => "!=",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Nil,
+}
+
+impl Value {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Value::Bool(_) => "boolean",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Nil => "nil",
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Bool(b) => write!(f, "{b}"),
+            Value::Number(x) => {
+                if x.trunc() == *x {
+                    write!(f, "{x:.1}")
+                } else {
+                    write!(f, "{x}")
+                }
+            }
+            Value::String(s) => write!(f, "{s}"),
+            Value::Nil => write!(f, "nil"),
+        }
     }
 }
 
@@ -99,6 +151,80 @@ pub enum Ast<'a> {
     Comparison(ComparisonOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Equality(EqualityOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Nil,
+}
+
+impl<'a> Ast<'a> {
+    pub fn eval(&self) -> Result<Value, anyhow::Error> {
+        match self {
+            Ast::Boolean(b) => Ok(Value::Bool(*b)),
+            Ast::Number(x) => Ok(Value::Number(*x)),
+            Ast::String(s) => Ok(Value::String(s.to_string())),
+            Ast::Group(inner) => inner.eval(),
+            Ast::Unary(op, right) => match op {
+                UnaryOp::Not => match right.eval()? {
+                    Value::Bool(b) => Ok(Value::Bool(!b)),
+                    x => Err(anyhow!("expected boolean. got {}", x.type_name())),
+                },
+                UnaryOp::Neg => match right.eval()? {
+                    Value::Number(x) => Ok(Value::Number(-x)),
+                    x => Err(anyhow!("expected boolean. got {}", x.type_name())),
+                },
+            },
+            Ast::Binary(op, left, right) => match (left.eval()?, right.eval()?) {
+                (Value::Number(a), Value::Number(b)) => match op {
+                    BinaryOp::Add => Ok(Value::Number(a + b)),
+                    BinaryOp::Sub => Ok(Value::Number(a - b)),
+                    BinaryOp::Mul => Ok(Value::Number(a * b)),
+                    BinaryOp::Div => Ok(Value::Number(a / b)),
+                },
+                (Value::String(a), Value::String(b)) => match op {
+                    BinaryOp::Add => Ok(Value::String(format!("{a}{b}"))),
+                    op => Err(anyhow!("operation {op} not implemented for strings")),
+                },
+                (l, r) => Err(anyhow!(
+                    "incompatible types for {op} {} {}",
+                    l.type_name(),
+                    r.type_name()
+                )),
+            },
+            Ast::Comparison(op, left, right) => match (left.eval()?, right.eval()?) {
+                (Value::Number(a), Value::Number(b)) => Ast::compare(*op, a, b),
+                (Value::Bool(a), Value::Bool(b)) => Ast::compare(*op, a, b),
+                (Value::String(a), Value::String(b)) => Ast::compare(*op, a.as_str(), b.as_str()),
+                (l, r) => Err(anyhow!(
+                    "incompatible types for {op} {} {}",
+                    l.type_name(),
+                    r.type_name()
+                )),
+            },
+            Ast::Equality(op, left, right) => match (left.eval()?, right.eval()?) {
+                (Value::Number(a), Value::Number(b)) => Ast::equal_to(*op, a, b),
+                (Value::Bool(a), Value::Bool(b)) => Ast::equal_to(*op, a, b),
+                (Value::String(a), Value::String(b)) => Ast::equal_to(*op, a.as_str(), b.as_str()),
+                (l, r) => Err(anyhow!(
+                    "incompatible types for {op} {} {}",
+                    l.type_name(),
+                    r.type_name()
+                )),
+            },
+            Ast::Nil => Ok(Value::Nil),
+        }
+    }
+    fn equal_to<T: PartialEq>(op: EqualityOp, a: T, b: T) -> Result<Value, anyhow::Error> {
+        match op {
+            EqualityOp::Equal => Ok(Value::Bool(a == b)),
+            EqualityOp::NotEqual => Ok(Value::Bool(a != b)),
+        }
+    }
+
+    fn compare<T: PartialOrd>(op: ComparisonOp, a: T, b: T) -> Result<Value, anyhow::Error> {
+        match op {
+            ComparisonOp::Less => Ok(Value::Bool(a < b)),
+            ComparisonOp::LessEqual => Ok(Value::Bool(a <= b)),
+            ComparisonOp::Greater => Ok(Value::Bool(a > b)),
+            ComparisonOp::GreaterEqual => Ok(Value::Bool(a >= b)),
+        }
+    }
 }
 
 impl<'a> fmt::Display for Ast<'a> {
@@ -171,10 +297,8 @@ impl<'a> Parser<'a> {
     fn parse_equality(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         let mut lhs = self.parse_relational()?;
         while let Some(true) = self.peek().map(|t| match t {
-            Ok(tok) => {
-                *tok == Token::EqualEqual || *tok == Token::BangEqual
-            }
-            _ => false
+            Ok(tok) => *tok == Token::EqualEqual || *tok == Token::BangEqual,
+            _ => false,
         }) {
             let op = self.peek().unwrap().copied()?;
             self.next();
@@ -182,7 +306,7 @@ impl<'a> Parser<'a> {
             let binary_op = match op {
                 Token::EqualEqual => EqualityOp::Equal,
                 Token::BangEqual => EqualityOp::NotEqual,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             lhs = Rc::new(Ast::Equality(binary_op, lhs, rhs));
         }
@@ -193,9 +317,12 @@ impl<'a> Parser<'a> {
         let mut lhs = self.parse_add()?;
         while let Some(true) = self.peek().map(|t| match t {
             Ok(tok) => {
-                *tok == Token::Less || *tok == Token::LessEqual || *tok == Token::Greater || *tok == Token::GreaterEqual
+                *tok == Token::Less
+                    || *tok == Token::LessEqual
+                    || *tok == Token::Greater
+                    || *tok == Token::GreaterEqual
             }
-            _ => false
+            _ => false,
         }) {
             let op = self.peek().unwrap().copied()?;
             self.next();
@@ -205,21 +332,18 @@ impl<'a> Parser<'a> {
                 Token::LessEqual => ComparisonOp::LessEqual,
                 Token::Greater => ComparisonOp::Greater,
                 Token::GreaterEqual => ComparisonOp::GreaterEqual,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             lhs = Rc::new(Ast::Comparison(binary_op, lhs, rhs));
         }
         Ok(lhs)
     }
 
-
     fn parse_add(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         let mut lhs = self.parse_mul()?;
         while let Some(true) = self.peek().map(|t| match t {
-            Ok(tok) => {
-                *tok == Token::Plus || *tok == Token::Minus
-            }
-            _ => false
+            Ok(tok) => *tok == Token::Plus || *tok == Token::Minus,
+            _ => false,
         }) {
             let op = self.peek().unwrap().copied()?;
             self.next();
@@ -227,7 +351,7 @@ impl<'a> Parser<'a> {
             let binary_op = match op {
                 Token::Plus => BinaryOp::Add,
                 Token::Minus => BinaryOp::Sub,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             lhs = Rc::new(Ast::Binary(binary_op, lhs, rhs));
         }
@@ -237,10 +361,8 @@ impl<'a> Parser<'a> {
     fn parse_mul(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         let mut lhs = self.parse_terminal_or_group()?;
         while let Some(true) = self.peek().map(|t| match t {
-            Ok(tok) => {
-                *tok == Token::Star || *tok == Token::Slash
-            }
-            _ => false
+            Ok(tok) => *tok == Token::Star || *tok == Token::Slash,
+            _ => false,
         }) {
             let op = self.peek().unwrap().copied()?;
             self.next();
@@ -248,7 +370,7 @@ impl<'a> Parser<'a> {
             let binary_op = match op {
                 Token::Star => BinaryOp::Mul,
                 Token::Slash => BinaryOp::Div,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             lhs = Rc::new(Ast::Binary(binary_op, lhs, rhs));
         }
@@ -290,9 +412,7 @@ impl<'a> Parser<'a> {
                     Some(Ok(t)) => {
                         Err(ParseError::RightParenExpected(self.line, t.lexeme().into()))
                     }
-                    None => {
-                        Err(ParseError::RightParenExpected(self.line, "EOF".into()))
-                    }
+                    None => Err(ParseError::RightParenExpected(self.line, "EOF".into())),
                     Some(Err(e)) => Err(e),
                 }
             }
