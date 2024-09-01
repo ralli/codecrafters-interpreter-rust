@@ -89,7 +89,6 @@ impl<'a> Token<'a> {
     pub fn repr(&self) -> Cow<'a, str> {
         match self {
             Token::String(s) => (*s).into(),
-            Token::Identifier(s) => (*s).into(),
             Token::Number(s) => {
                 let x = s.parse::<f64>().unwrap();
                 if x.trunc() == x {
