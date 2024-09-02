@@ -184,8 +184,8 @@ impl<'a> Ast<'a> {
             },
             Ast::Comparison(op, left, right) => match (left.eval()?, right.eval()?) {
                 (Value::Number(a), Value::Number(b)) => Ast::compare(*op, a, b),
-                (Value::Bool(a), Value::Bool(b)) => Ast::compare(*op, a, b),
-                (Value::String(a), Value::String(b)) => Ast::compare(*op, a.as_str(), b.as_str()),
+                // (Value::Bool(a), Value::Bool(b)) => Ast::compare(*op, a, b),
+                // (Value::String(a), Value::String(b)) => Ast::compare(*op, a.as_str(), b.as_str()),
                 _ => Err(anyhow!("Operands must be numbers.")),
             },
             Ast::Equality(op, left, right) => match (left.eval()?, right.eval()?) {
