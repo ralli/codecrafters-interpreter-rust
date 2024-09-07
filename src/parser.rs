@@ -109,17 +109,17 @@ impl<'a> Parser<'a> {
             ));
         };
         let name = name.to_string();
-        let Some(Ok(Token::Equal)) = self.next() else {
+        if let Some(Ok(Token::Semicolon)) = self.next() {
+            self.next();
+            return Ok(Statement::AssignmentStatement(name, None));
+        }
+        let Some(Ok(Token::Equal)) = self.peek() else {
             return Err(ParseError::ExpressionExpected(
                 self.line,
                 "= expected".to_string(),
             ));
         };
         self.next();
-        if let Some(Ok(Token::Semicolon)) = self.peek() {
-            self.next();
-            return Ok(Statement::AssignmentStatement(name, None));
-        }
         let expression = self.parse_expression()?;
         let Some(Ok(Token::Semicolon)) = self.peek() else {
             return Err(ParseError::ExpressionExpected(
