@@ -36,8 +36,12 @@ impl<'a> Interpreter<'a> {
                     let _ = expression.eval(&self.variables)?;
                 }
                 Statement::AssignmentStatement(name, expression) => {
-                    let value = expression.eval(&self.variables)?;
-                    self.variables.insert(name.to_string(), value);
+                    if let Some(expression) = expression {
+                        let value = expression.eval(&self.variables)?;
+                        self.variables.insert(name.to_string(), value);
+                    } else {
+                        self.variables.insert(name.to_string(), Value::Nil);
+                    }
                 }
             }
         }

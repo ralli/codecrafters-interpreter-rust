@@ -15,7 +15,7 @@ pub enum RuntimeError {
 pub enum Statement<'a> {
     PrintStatement(Rc<Ast<'a>>),
     ExpressionStatement(Rc<Ast<'a>>),
-    AssignmentStatement(String, Rc<Ast<'a>>),
+    AssignmentStatement(String, Option<Rc<Ast<'a>>>),
 }
 
 impl<'a> fmt::Display for Statement<'a> {
@@ -24,7 +24,11 @@ impl<'a> fmt::Display for Statement<'a> {
             Statement::PrintStatement(expr) => write!(f, "(print {expr})"),
             Statement::ExpressionStatement(expr) => write!(f, "{expr}"),
             Statement::AssignmentStatement(variable, expr) => {
-                write!(f, "(assign {variable} {expr})")
+                if let Some(expr) = expr {
+                    write!(f, "(assign {variable} {expr})")
+                } else {
+                    write!(f, "(declare {variable})")
+                }
             }
         }
     }

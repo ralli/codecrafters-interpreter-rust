@@ -116,6 +116,10 @@ impl<'a> Parser<'a> {
             ));
         };
         self.next();
+        if let Some(Ok(Token::Semicolon)) = self.peek() {
+            self.next();
+            return Ok(Statement::AssignmentStatement(name, None));
+        }
         let expression = self.parse_expression()?;
         let Some(Ok(Token::Semicolon)) = self.peek() else {
             return Err(ParseError::ExpressionExpected(
@@ -124,7 +128,7 @@ impl<'a> Parser<'a> {
             ));
         };
         self.next();
-        Ok(Statement::AssignmentStatement(name, expression))
+        Ok(Statement::AssignmentStatement(name, Some(expression)))
     }
 
     fn parse_expression(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
