@@ -139,7 +139,7 @@ impl<'a> Parser<'a> {
         let mut lhs = self.parse_equality()?;
         while let Some(Ok(Token::Equal)) = self.peek() {
             self.next();
-            let rhs = self.parse_equality()?;
+            let rhs = self.parse_assignment()?;
             lhs = Rc::new(Ast::Assignment(lhs, rhs));
         }
         Ok(lhs)
