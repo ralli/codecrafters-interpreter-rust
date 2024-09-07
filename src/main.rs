@@ -109,8 +109,8 @@ fn parse(input: &str) -> Result<Rc<Ast>, anyhow::Error> {
 fn evaluate(input: &str) -> Result<Value, anyhow::Error> {
     let mut parser = codecrafters_interpreter::Parser::new(input);
     let ast = parser.parse()?;
-    let variables = HashMap::new();
-    ast.eval(&variables).map_err(Into::into)
+    let mut variables = HashMap::new();
+    ast.eval(&mut variables).map_err(Into::into)
 }
 
 fn run(input: &str) -> Result<(), InterpreterError> {

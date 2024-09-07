@@ -29,15 +29,15 @@ impl<'a> Interpreter<'a> {
         for statement in statements.iter() {
             match statement {
                 Statement::PrintStatement(expression) => {
-                    let value = expression.eval(&self.variables)?;
+                    let value = expression.eval(&mut self.variables)?;
                     println!("{value}");
                 }
                 Statement::ExpressionStatement(expression) => {
-                    let _ = expression.eval(&self.variables)?;
+                    let _ = expression.eval(&mut self.variables)?;
                 }
                 Statement::AssignmentStatement(name, expression) => {
                     if let Some(expression) = expression {
-                        let value = expression.eval(&self.variables)?;
+                        let value = expression.eval(&mut self.variables)?;
                         self.variables.insert(name.to_string(), value);
                     } else {
                         self.variables.insert(name.to_string(), Value::Nil);

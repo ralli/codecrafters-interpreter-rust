@@ -132,7 +132,17 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
+        let mut lhs = self.parse_equality()?;
+        while let Some(Ok(Token::Equal)) = self.peek() {
+            self.next();
+            let rhs = self.parse_equality()?;
+            lhs = Rc::new(Ast::Assignment(lhs, rhs));
+        }
+        Ok(lhs)
     }
 
     fn parse_equality(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {

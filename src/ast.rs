@@ -45,11 +45,12 @@ pub enum Ast<'a> {
     Binary(BinaryOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Comparison(ComparisonOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
     Equality(EqualityOp, Rc<Ast<'a>>, Rc<Ast<'a>>),
+    Assignment(Rc<Ast<'a>>, Rc<Ast<'a>>),
     Nil,
 }
 
 impl<'a> Ast<'a> {
-    pub fn eval(&self, variables: &HashMap<String, Value>) -> Result<Value, RuntimeError> {
+    pub fn eval(&self, variables: &mut HashMap<String, Value>) -> Result<Value, RuntimeError> {
         match self {
             Ast::Boolean(b) => Ok(Value::Bool(*b)),
             Ast::Number(x) => Ok(Value::Number(*x)),
@@ -109,6 +110,13 @@ impl<'a> Ast<'a> {
                 (Value::Nil, Value::Nil) => Ok(Value::Bool(true)),
                 _ => Ok(Value::Bool(false)),
             },
+            Ast::Assignment(left, right) => match (left.as_ref(), right.eval(variables)?) {
+                (Ast::Identifier(name), v) => {
+                    variables.insert(name.to_string(), v.clone());
+                    Ok(v)
+                }
+                _ => Err(RuntimeError::Any(anyhow!("Can only assign to variables"))),
+            },
             Ast::Nil => Ok(Value::Nil),
         }
     }
@@ -146,6 +154,7 @@ impl<'a> fmt::Display for Ast<'a> {
             Ast::Binary(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
             Ast::Comparison(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
             Ast::Equality(op, lhs, rhs) => write!(f, "({} {} {})", op, lhs, rhs),
+            Ast::Assignment(left, right) => write!(f, "(= {left} {right})"),
             Ast::Nil => write!(f, "nil"),
         }
     }
