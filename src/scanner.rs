@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
-use std::iter::{Enumerate, Peekable};
+use std::iter::Peekable;
 use std::str::Chars;
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum ScannerError {
     #[error("[line {}] Error: Unexpected character: {}", line, c)]
     InvalidCharacter { line: usize, c: char },
@@ -13,6 +13,7 @@ pub enum ScannerError {
     #[error("[line {}] Error: Unterminated string.", line)]
     UnterminatedString { line: usize },
 }
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Token<'a> {
     Bang,
@@ -165,9 +166,41 @@ impl<'a> fmt::Display for Token<'a> {
 }
 
 #[derive(Debug)]
+struct UtfPosChars<'a> {
+    input: &'a str,
+    pos: usize,
+    it: Chars<'a>,
+}
+
+impl<'a> UtfPosChars<'a> {
+    fn new(input: &'a str) -> Self {
+        Self {
+            input,
+            pos: 0,
+            it: input.chars(),
+        }
+    }
+}
+
+impl<'a> Iterator for UtfPosChars<'a> {
+    type Item = (usize, char);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.it.next() {
+            Some(ch) => {
+                let current_pos = self.pos;
+                self.pos += ch.len_utf8();
+                Some((current_pos, ch))
+            }
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Scanner<'a> {
     input: &'a str,
-    it: Peekable<Enumerate<Chars<'a>>>,
+    it: Peekable<UtfPosChars<'a>>,
     line: usize,
 }
 
@@ -175,7 +208,7 @@ impl<'a> Scanner<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             input,
-            it: input.chars().enumerate().peekable(),
+            it: UtfPosChars::new(input).peekable(),
             line: 1,
         }
     }
@@ -328,5 +361,35 @@ impl<'a> Iterator for Scanner<'a> {
             '"' => self.scan_string(),
             _ => Some(Err(ScannerError::InvalidCharacter { line: self.line, c })),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scanner_unicode_string() -> Result<(), anyhow::Error> {
+        let input = r#""ॐa""#;
+        let scanner = Scanner::new(input);
+        let tokens: Vec<_> = scanner.collect();
+        dbg!(&tokens);
+        let expected = Token::String("ॐa");
+        assert_eq!(Ok(expected), tokens[0]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_chars_unicode() {
+        let input = "ॐa";
+        let mut it = UtfPosChars::new(input);
+        let (i, ch) = it.next().unwrap();
+        assert_eq!('ॐ', ch);
+        assert_eq!(3, ch.len_utf8());
+        assert_eq!(0, i);
+        let (i, ch) = it.next().unwrap();
+        assert_eq!('a', ch);
+        assert_eq!(1, ch.len_utf8());
+        assert_eq!(3, i);
     }
 }
