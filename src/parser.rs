@@ -204,7 +204,6 @@ impl<'a> Ast<'a> {
             EqualityOp::NotEqual => Ok(Value::Bool(a != b)),
         }
     }
-
     fn compare<T: PartialOrd>(op: ComparisonOp, a: T, b: T) -> Result<Value, anyhow::Error> {
         match op {
             ComparisonOp::Less => Ok(Value::Bool(a < b)),
