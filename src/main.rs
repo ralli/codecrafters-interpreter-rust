@@ -68,12 +68,9 @@ fn main() -> Result<(), anyhow::Error> {
             let file_contents = fs::read_to_string(&filename)
                 .with_context(|| format!("cannot load file {:?}", &filename))?;
             let result = run(&file_contents);
-            match result {
-                Err(e) => {
-                    eprintln!("{e}");
-                    exit(70);
-                }
-                _ => (),
+            if let Err(e) = result {
+                eprintln!("{e}");
+                exit(65);
             };
         }
     }
@@ -112,15 +109,12 @@ fn run(input: &str) -> Result<(), anyhow::Error> {
     let mut parser = codecrafters_interpreter::Parser::new(input);
     let statements = parser.parse_statement_list()?;
     for statement in statements.iter() {
-        match statement {
-            Statement::PrintStatement(expression) => {
-                let value = expression.eval();
-                match value {
-                    Ok(value) => println!("{value}"),
-                    Err(e) => eprintln!("{e}"),
-                }
+        if let Statement::PrintStatement(expression) = statement {
+            let value = expression.eval();
+            match value {
+                Ok(value) => println!("{value}"),
+                Err(e) => eprintln!("{e}"),
             }
-            _ => (),
         }
     }
     Ok(())

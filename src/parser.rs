@@ -60,13 +60,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> Option<Result<Statement<'a>, ParseError>> {
-        if self.peek().is_none() {
-            return None;
-        }
-        if let Some(true) = self.peek().map(|t| match t {
-            Ok(Token::Print) => true,
-            _ => false,
-        }) {
+        let _ = self.peek()?;
+
+        if let Some(true) = self.peek().map(|t| matches!(t, Ok(Token::Print))) {
             self.next();
             let expression = match self.parse_expression() {
                 Ok(x) => x,
