@@ -1,12 +1,21 @@
 use anyhow::anyhow;
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
 use std::rc::Rc;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum RuntimeError {
+    #[error("{0}")]
+    Any(#[from] anyhow::Error),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement<'a> {
     PrintStatement(Rc<Ast<'a>>),
     ExpressionStatement(Rc<Ast<'a>>),
+    AssignmentStatement(String, Rc<Ast<'a>>),
 }
 
 impl<'a> fmt::Display for Statement<'a> {
@@ -14,6 +23,9 @@ impl<'a> fmt::Display for Statement<'a> {
         match self {
             Statement::PrintStatement(expr) => write!(f, "(print {expr})"),
             Statement::ExpressionStatement(expr) => write!(f, "{expr}"),
+            Statement::AssignmentStatement(variable, expr) => {
+                write!(f, "(assign {variable} {expr})")
+            }
         }
     }
 }
@@ -22,6 +34,7 @@ impl<'a> fmt::Display for Statement<'a> {
 pub enum Ast<'a> {
     Boolean(bool),
     Number(f64),
+    Identifier(&'a str),
     String(&'a str),
     Group(Rc<Ast<'a>>),
     Unary(UnaryOp, Rc<Ast<'a>>),
@@ -32,24 +45,31 @@ pub enum Ast<'a> {
 }
 
 impl<'a> Ast<'a> {
-    pub fn eval(&self) -> Result<Value, anyhow::Error> {
+    pub fn eval(&self, variables: &HashMap<String, Value>) -> Result<Value, RuntimeError> {
         match self {
             Ast::Boolean(b) => Ok(Value::Bool(*b)),
             Ast::Number(x) => Ok(Value::Number(*x)),
+            Ast::Identifier(s) => {
+                let v = s.to_string();
+                match variables.get(&v) {
+                    Some(value) => Ok(value.clone()),
+                    None => Err(RuntimeError::Any(anyhow!("{s} not defined"))),
+                }
+            }
             Ast::String(s) => Ok(Value::String(s.to_string())),
-            Ast::Group(inner) => inner.eval(),
+            Ast::Group(inner) => inner.eval(variables),
             Ast::Unary(op, right) => match op {
-                UnaryOp::Not => match right.eval()? {
+                UnaryOp::Not => match right.eval(variables)? {
                     Value::Bool(b) => Ok(Value::Bool(!b)),
                     Value::Nil => Ok(Value::Bool(true)),
                     _ => Ok(Value::Bool(false)),
                 },
-                UnaryOp::Neg => match right.eval()? {
+                UnaryOp::Neg => match right.eval(variables)? {
                     Value::Number(x) => Ok(Value::Number(-x)),
-                    _ => Err(anyhow!("Operand must be a number.")),
+                    _ => Err(RuntimeError::Any(anyhow!("Operand must be a number."))),
                 },
             },
-            Ast::Binary(op, left, right) => match (left.eval()?, right.eval()?) {
+            Ast::Binary(op, left, right) => match (left.eval(variables)?, right.eval(variables)?) {
                 (Value::Number(a), Value::Number(b)) => match op {
                     BinaryOp::Add => Ok(Value::Number(a + b)),
                     BinaryOp::Sub => Ok(Value::Number(a - b)),
@@ -58,22 +78,27 @@ impl<'a> Ast<'a> {
                 },
                 (Value::String(a), Value::String(b)) => match op {
                     BinaryOp::Add => Ok(Value::String(format!("{a}{b}"))),
-                    op => Err(anyhow!("operation {op} not implemented for strings")),
+                    op => Err(RuntimeError::Any(anyhow!(
+                        "operation {op} not implemented for strings"
+                    ))),
                 },
-                (l, r) => Err(anyhow!(
+                (l, r) => Err(RuntimeError::Any(anyhow!(
                     "incompatible types for {op} {} {}",
                     l.type_name(),
                     r.type_name()
-                )),
+                ))),
             },
-            Ast::Comparison(op, left, right) => match (left.eval()?, right.eval()?) {
-                (Value::Number(a), Value::Number(b)) => Ast::compare(*op, a, b),
-                /* would be cooler, if comparison would be implemented on numbers and strings as well */
-                // (Value::Bool(a), Value::Bool(b)) => Ast::compare(*op, a, b),
-                // (Value::String(a), Value::String(b)) => Ast::compare(*op, a.as_str(), b.as_str()),
-                _ => Err(anyhow!("Operands must be numbers.")),
-            },
-            Ast::Equality(op, left, right) => match (left.eval()?, right.eval()?) {
+            Ast::Comparison(op, left, right) => {
+                match (left.eval(variables)?, right.eval(variables)?) {
+                    (Value::Number(a), Value::Number(b)) => Ast::compare(*op, a, b),
+                    /* would be cooler, if comparison would be implemented on numbers and strings as well */
+                    // (Value::Bool(a), Value::Bool(b)) => Ast::compare(*op, a, b),
+                    // (Value::String(a), Value::String(b)) => Ast::compare(*op, a.as_str(), b.as_str()),
+                    _ => Err(RuntimeError::Any(anyhow!("Operands must be numbers."))),
+                }
+            }
+            Ast::Equality(op, left, right) => match (left.eval(variables)?, right.eval(variables)?)
+            {
                 (Value::Number(a), Value::Number(b)) => Ast::equal_to(*op, a, b),
                 (Value::Bool(a), Value::Bool(b)) => Ast::equal_to(*op, a, b),
                 (Value::String(a), Value::String(b)) => Ast::equal_to(*op, a.as_str(), b.as_str()),
@@ -83,13 +108,13 @@ impl<'a> Ast<'a> {
             Ast::Nil => Ok(Value::Nil),
         }
     }
-    fn equal_to<T: PartialEq>(op: EqualityOp, a: T, b: T) -> Result<Value, anyhow::Error> {
+    fn equal_to<T: PartialEq>(op: EqualityOp, a: T, b: T) -> Result<Value, RuntimeError> {
         match op {
             EqualityOp::Equal => Ok(Value::Bool(a == b)),
             EqualityOp::NotEqual => Ok(Value::Bool(a != b)),
         }
     }
-    fn compare<T: PartialOrd>(op: ComparisonOp, a: T, b: T) -> Result<Value, anyhow::Error> {
+    fn compare<T: PartialOrd>(op: ComparisonOp, a: T, b: T) -> Result<Value, RuntimeError> {
         match op {
             ComparisonOp::Less => Ok(Value::Bool(a < b)),
             ComparisonOp::LessEqual => Ok(Value::Bool(a <= b)),
@@ -110,6 +135,7 @@ impl<'a> fmt::Display for Ast<'a> {
                     write!(f, "{}", x)
                 }
             }
+            Ast::Identifier(s) => write!(f, "${s}"),
             Ast::String(s) => write!(f, "{s}"),
             Ast::Group(inner) => write!(f, "(group {inner})"),
             Ast::Unary(op, rhs) => write!(f, "({op} {rhs})"),

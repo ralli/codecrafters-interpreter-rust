@@ -1,6 +1,7 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use codecrafters_interpreter::{Ast, Scanner, Statement, Value};
+use codecrafters_interpreter::{Ast, Interpreter, InterpreterError, Scanner, Value};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
@@ -67,7 +68,17 @@ fn main() -> Result<(), anyhow::Error> {
         Commands::Run { filename } => {
             let file_contents = fs::read_to_string(&filename)
                 .with_context(|| format!("cannot load file {:?}", &filename))?;
-            run(&file_contents);
+            match run(&file_contents) {
+                Err(InterpreterError::RuntimeError(e)) => {
+                    eprintln!("{e}");
+                    exit(70);
+                }
+                Err(InterpreterError::ParseError(e)) => {
+                    eprintln!("{e}");
+                    exit(65);
+                }
+                _ => (),
+            }
         }
     }
 
@@ -98,37 +109,11 @@ fn parse(input: &str) -> Result<Rc<Ast>, anyhow::Error> {
 fn evaluate(input: &str) -> Result<Value, anyhow::Error> {
     let mut parser = codecrafters_interpreter::Parser::new(input);
     let ast = parser.parse()?;
-    ast.eval()
+    let variables = HashMap::new();
+    ast.eval(&variables).map_err(Into::into)
 }
 
-fn run(input: &str) {
-    let mut parser = codecrafters_interpreter::Parser::new(input);
-    let statements = match parser.parse_statement_list() {
-        Ok(statements) => statements,
-        Err(e) => {
-            eprintln!("{e}");
-            exit(65);
-        }
-    };
-    for statement in statements.iter() {
-        match statement {
-            Statement::PrintStatement(expression) => {
-                let value = expression.eval();
-                match value {
-                    Ok(value) => println!("{value}"),
-                    Err(e) => {
-                        eprintln!("{e}");
-                        exit(70);
-                    }
-                }
-            }
-            Statement::ExpressionStatement(expression) => match expression.eval() {
-                Ok(_) => (),
-                Err(e) => {
-                    eprintln!("{e}");
-                    exit(70);
-                }
-            },
-        }
-    }
+fn run(input: &str) -> Result<(), InterpreterError> {
+    let mut interpreter = Interpreter::new(input);
+    interpreter.run()
 }

@@ -167,7 +167,6 @@ impl<'a> fmt::Display for Token<'a> {
 
 #[derive(Debug)]
 struct UtfPosChars<'a> {
-    input: &'a str,
     pos: usize,
     it: Chars<'a>,
 }
@@ -175,7 +174,6 @@ struct UtfPosChars<'a> {
 impl<'a> UtfPosChars<'a> {
     fn new(input: &'a str) -> Self {
         Self {
-            input,
             pos: 0,
             it: input.chars(),
         }
@@ -265,12 +263,16 @@ impl<'a> Scanner<'a> {
                 self.it.next();
             }
         }
-        let s = if let Some((end, _c)) = self.it.peek().copied() {
+
+        Some(Ok(Token::Number(self.token_str(start))))
+    }
+
+    fn token_str(&mut self, start: usize) -> &'a str {
+        if let Some((end, _c)) = self.it.peek().copied() {
             &self.input[start..end]
         } else {
             &self.input[start..]
-        };
-        Some(Ok(Token::Number(s)))
+        }
     }
 
     fn scan_identifier(&mut self) -> Option<Result<Token<'a>, ScannerError>> {
@@ -282,11 +284,7 @@ impl<'a> Scanner<'a> {
         {
             self.it.next();
         }
-        let s = if let Some((end, _c)) = self.it.peek().copied() {
-            &self.input[start..end]
-        } else {
-            &self.input[start..]
-        };
+        let s = self.token_str(start);
         let tok = match s {
             "and" => Token::And,
             "class" => Token::Class,
