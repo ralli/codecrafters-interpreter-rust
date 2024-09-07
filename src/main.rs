@@ -67,11 +67,7 @@ fn main() -> Result<(), anyhow::Error> {
         Commands::Run { filename } => {
             let file_contents = fs::read_to_string(&filename)
                 .with_context(|| format!("cannot load file {:?}", &filename))?;
-            let result = run(&file_contents);
-            if let Err(e) = result {
-                eprintln!("{e}");
-                exit(70);
-            };
+            run(&file_contents);
         }
     }
 
@@ -105,23 +101,34 @@ fn evaluate(input: &str) -> Result<Value, anyhow::Error> {
     ast.eval()
 }
 
-fn run(input: &str) -> Result<(), anyhow::Error> {
+fn run(input: &str) {
     let mut parser = codecrafters_interpreter::Parser::new(input);
-    let statements = parser.parse_statement_list()?;
+    let statements = match parser.parse_statement_list() {
+        Ok(statements) => statements,
+        Err(e) => {
+            eprintln!("{e}");
+            exit(65);
+        }
+    };
     for statement in statements.iter() {
         match statement {
             Statement::PrintStatement(expression) => {
                 let value = expression.eval();
                 match value {
                     Ok(value) => println!("{value}"),
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        eprintln!("{e}");
+                        exit(70);
+                    }
                 }
             }
             Statement::ExpressionStatement(expression) => match expression.eval() {
                 Ok(_) => (),
-                Err(e) => return Err(e),
+                Err(e) => {
+                    eprintln!("{e}");
+                    exit(70);
+                }
             },
         }
     }
-    Ok(())
 }
