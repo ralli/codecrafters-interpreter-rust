@@ -1,5 +1,9 @@
+mod ast;
+mod error;
 mod parser;
 mod scanner;
 
-pub use parser::{Ast, ParseError, Parser, Value};
+pub use ast::{Ast, Value};
+pub use error::ParseError;
+pub use parser::Parser;
 pub use scanner::{Scanner, ScannerError, Token};
