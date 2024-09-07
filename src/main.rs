@@ -70,7 +70,7 @@ fn main() -> Result<(), anyhow::Error> {
             let result = run(&file_contents);
             if let Err(e) = result {
                 eprintln!("{e}");
-                exit(65);
+                exit(70);
             };
         }
     }
@@ -109,12 +109,18 @@ fn run(input: &str) -> Result<(), anyhow::Error> {
     let mut parser = codecrafters_interpreter::Parser::new(input);
     let statements = parser.parse_statement_list()?;
     for statement in statements.iter() {
-        if let Statement::PrintStatement(expression) = statement {
-            let value = expression.eval();
-            match value {
-                Ok(value) => println!("{value}"),
-                Err(e) => eprintln!("{e}"),
+        match statement {
+            Statement::PrintStatement(expression) => {
+                let value = expression.eval();
+                match value {
+                    Ok(value) => println!("{value}"),
+                    Err(e) => return Err(e),
+                }
             }
+            Statement::ExpressionStatement(expression) => match expression.eval() {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            },
         }
     }
     Ok(())
