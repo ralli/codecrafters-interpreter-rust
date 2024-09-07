@@ -45,7 +45,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_statement_list(&mut self) -> Result<Vec<Statement<'a>>, ParseError> {
+    pub fn parse_statement_list(&mut self) -> Result<Vec<Rc<Statement<'a>>>, ParseError> {
         let mut result = Vec::new();
         self.next();
         loop {
@@ -59,49 +59,56 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn parse_statement(&mut self) -> Option<Result<Statement<'a>, ParseError>> {
-        let _ = self.peek()?;
-
-        match self.peek() {
-            Some(Ok(Token::Print)) => {
+    fn parse_statement(&mut self) -> Option<Result<Rc<Statement<'a>>, ParseError>> {
+        match self.peek()? {
+            Ok(Token::Print) => {
                 self.next();
-                let expression = match self.parse_expression() {
-                    Ok(x) => x,
-                    Err(e) => return Some(Err(e)),
-                };
-                if let Some(Ok(Token::Semicolon)) = self.peek() {
-                    self.next();
-                    Some(Ok(Statement::PrintStatement(expression)))
-                } else {
-                    Some(Err(ParseError::ExpressionExpected(
-                        self.line,
-                        "; expected".to_string(),
-                    )))
-                }
+                Some(self.parse_print_statement())
             }
-            Some(Ok(Token::Var)) => {
+            Ok(Token::Var) => {
                 self.next();
                 Some(self.parse_assignment_statement())
             }
-            _ => {
-                let expression = match self.parse_expression() {
-                    Ok(x) => x,
-                    Err(e) => return Some(Err(e)),
-                };
-                if let Some(Ok(Token::Semicolon)) = self.peek() {
-                    self.next();
-                    Some(Ok(Statement::ExpressionStatement(expression)))
-                } else {
-                    Some(Err(ParseError::ExpressionExpected(
-                        self.line,
-                        "; expected".to_string(),
-                    )))
-                }
+            Ok(Token::LeftBrace) => {
+                self.next();
+                Some(self.parse_block_statement())
             }
+            _ => Some(self.parse_expression_statment()),
         }
     }
 
-    fn parse_assignment_statement(&mut self) -> Result<Statement<'a>, ParseError> {
+    fn parse_block_statement(&mut self) -> Result<Rc<Statement<'a>>, ParseError> {
+        let mut statements: Vec<Rc<Statement>> = Vec::new();
+        loop {
+            let Some(current) = self.parse_statement() else {
+                return Err(ParseError::ExpressionExpected(
+                    self.line,
+                    "} expected. EOF found".to_string(),
+                ));
+            };
+            let current = current?;
+            statements.push(current);
+            if let Some(Ok(Token::RightBrace)) = self.peek() {
+                self.next();
+                break;
+            }
+        }
+        Ok(Rc::new(Statement::BlockStatement(statements)))
+    }
+
+    fn parse_print_statement(&mut self) -> Result<Rc<Statement<'a>>, ParseError> {
+        let expression = self.parse_expression()?;
+        let Some(Ok(Token::Semicolon)) = self.peek() else {
+            return Err(ParseError::ExpressionExpected(
+                self.line,
+                "; expected".to_string(),
+            ));
+        };
+        self.next();
+        Ok(Rc::new(Statement::PrintStatement(expression)))
+    }
+
+    fn parse_assignment_statement(&mut self) -> Result<Rc<Statement<'a>>, ParseError> {
         let Some(Ok(Token::Identifier(name))) = self.peek() else {
             return Err(ParseError::ExpressionExpected(
                 self.line,
@@ -111,7 +118,7 @@ impl<'a> Parser<'a> {
         let name = name.to_string();
         if let Some(Ok(Token::Semicolon)) = self.next() {
             self.next();
-            return Ok(Statement::AssignmentStatement(name, None));
+            return Ok(Rc::new(Statement::AssignmentStatement(name, None)));
         }
         let Some(Ok(Token::Equal)) = self.peek() else {
             return Err(ParseError::ExpressionExpected(
@@ -128,7 +135,22 @@ impl<'a> Parser<'a> {
             ));
         };
         self.next();
-        Ok(Statement::AssignmentStatement(name, Some(expression)))
+        Ok(Rc::new(Statement::AssignmentStatement(
+            name,
+            Some(expression),
+        )))
+    }
+
+    fn parse_expression_statment(&mut self) -> Result<Rc<Statement<'a>>, ParseError> {
+        let expression = self.parse_expression()?;
+        let Some(Ok(Token::Semicolon)) = self.peek() else {
+            return Err(ParseError::ExpressionExpected(
+                self.line,
+                "; expected".to_string(),
+            ));
+        };
+        self.next();
+        Ok(Rc::new(Statement::ExpressionStatement(expression)))
     }
 
     fn parse_expression(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {

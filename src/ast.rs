@@ -16,6 +16,7 @@ pub enum Statement<'a> {
     PrintStatement(Rc<Ast<'a>>),
     ExpressionStatement(Rc<Ast<'a>>),
     AssignmentStatement(String, Option<Rc<Ast<'a>>>),
+    BlockStatement(Vec<Rc<Statement<'a>>>),
 }
 
 impl<'a> fmt::Display for Statement<'a> {
@@ -29,6 +30,16 @@ impl<'a> fmt::Display for Statement<'a> {
                 } else {
                     write!(f, "(declare {variable})")
                 }
+            }
+            Statement::BlockStatement(inner) => {
+                write!(f, "(block ")?;
+                for (i, s) in inner.iter().enumerate() {
+                    if i > 1 {
+                        write!(f, ";")?;
+                    }
+                    write!(f, "{s}")?;
+                }
+                write!(f, ")")
             }
         }
     }
