@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use codecrafters_interpreter::{Ast, Scanner, Value};
+use codecrafters_interpreter::{Ast, Scanner, Statement, Value};
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
@@ -22,6 +22,8 @@ enum Commands {
     Parse { filename: PathBuf },
     /// Evaluates the input file
     Evaluate { filename: PathBuf },
+    /// Runs the input file
+    Run { filename: PathBuf },
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -62,6 +64,18 @@ fn main() -> Result<(), anyhow::Error> {
                 }
             };
         }
+        Commands::Run { filename } => {
+            let file_contents = fs::read_to_string(&filename)
+                .with_context(|| format!("cannot load file {:?}", &filename))?;
+            let result = run(&file_contents);
+            match result {
+                Err(e) => {
+                    eprintln!("{e}");
+                    exit(70);
+                }
+                _ => (),
+            };
+        }
     }
 
     Ok(())
@@ -92,4 +106,22 @@ fn evaluate(input: &str) -> Result<Value, anyhow::Error> {
     let mut parser = codecrafters_interpreter::Parser::new(input);
     let ast = parser.parse()?;
     ast.eval()
+}
+
+fn run(input: &str) -> Result<(), anyhow::Error> {
+    let mut parser = codecrafters_interpreter::Parser::new(input);
+    let statements = parser.parse_statement_list()?;
+    for statement in statements.iter() {
+        match statement {
+            Statement::PrintStatement(expression) => {
+                let value = expression.eval();
+                match value {
+                    Ok(value) => println!("{value}"),
+                    Err(e) => eprintln!("{e}"),
+                }
+            }
+            _ => (),
+        }
+    }
+    Ok(())
 }

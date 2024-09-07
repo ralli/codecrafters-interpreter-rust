@@ -45,6 +45,58 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn parse_statement_list(&mut self) -> Result<Vec<Statement<'a>>, ParseError> {
+        let mut result = Vec::new();
+        self.next();
+        loop {
+            let bla = self.parse_statement();
+            match bla {
+                Some(Ok(statement)) => result.push(statement),
+                Some(Err(err)) => return Err(err),
+                None => break,
+            };
+        }
+        Ok(result)
+    }
+
+    fn parse_statement(&mut self) -> Option<Result<Statement<'a>, ParseError>> {
+        if self.peek().is_none() {
+            return None;
+        }
+        if let Some(true) = self.peek().map(|t| match t {
+            Ok(Token::Print) => true,
+            _ => false,
+        }) {
+            self.next();
+            let expression = match self.parse_expression() {
+                Ok(x) => x,
+                Err(e) => return Some(Err(e)),
+            };
+            return if let Some(Ok(Token::Semicolon)) = self.peek() {
+                self.next();
+                Some(Ok(Statement::PrintStatement(expression)))
+            } else {
+                Some(Err(ParseError::ExpressionExpected(
+                    self.line,
+                    "; expected".to_string(),
+                )))
+            };
+        }
+        let expression = match self.parse_expression() {
+            Ok(x) => x,
+            Err(e) => return Some(Err(e)),
+        };
+        if let Some(Ok(Token::Semicolon)) = self.peek() {
+            self.next();
+            Some(Ok(Statement::ExpressionStatement(expression)))
+        } else {
+            Some(Err(ParseError::ExpressionExpected(
+                self.line,
+                "; expected".to_string(),
+            )))
+        }
+    }
+
     fn parse_expression(&mut self) -> Result<Rc<Ast<'a>>, ParseError> {
         self.parse_equality()
     }

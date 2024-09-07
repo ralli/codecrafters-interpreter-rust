@@ -4,6 +4,21 @@ use std::fmt::Formatter;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Statement<'a> {
+    PrintStatement(Rc<Ast<'a>>),
+    ExpressionStatement(Rc<Ast<'a>>),
+}
+
+impl<'a> fmt::Display for Statement<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Statement::PrintStatement(expr) => write!(f, "(print {expr})"),
+            Statement::ExpressionStatement(expr) => write!(f, "{expr}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ast<'a> {
     Boolean(bool),
     Number(f64),
